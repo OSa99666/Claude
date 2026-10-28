@@ -1,0 +1,105 @@
+[
+  {
+    "id": "tab1",
+    "type": "tab",
+    "label": "UI template storage"
+  },
+  {
+    "id": "base1",
+    "type": "ui-base",
+    "name": "Dashboard",
+    "path": "/dashboard",
+    "includeClientData": true,
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ],
+    "showPathInSidebar": false
+  },
+  {
+    "id": "theme1",
+    "type": "ui-theme",
+    "name": "Default",
+    "colors": {
+      "surface": "#ffffff",
+      "primary": "#0094ce",
+      "bgPage": "#eeeeee",
+      "groupBg": "#ffffff",
+      "groupOutline": "#cccccc"
+    },
+    "sizes": {
+      "density": "default",
+      "pagePadding": "12px",
+      "groupGap": "12px",
+      "groupBorderRadius": "4px",
+      "widgetGap": "12px"
+    }
+  },
+  {
+    "id": "page1",
+    "type": "ui-page",
+    "name": "Settings",
+    "ui": "base1",
+    "path": "/settings",
+    "icon": "home",
+    "layout": "grid",
+    "theme": "theme1",
+    "order": 1,
+    "className": ""
+  },
+  {
+    "id": "group1",
+    "type": "ui-group",
+    "name": "Stored",
+    "page": "page1",
+    "width": 6,
+    "height": 1,
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "groupType": "default",
+    "disabled": false,
+    "visible": true
+  },
+  {
+    "id": "tpl1",
+    "type": "ui-template",
+    "group": "group1",
+    "page": "",
+    "ui": "",
+    "name": "Stored settings",
+    "order": 1,
+    "width": 0,
+    "height": 0,
+    "head": "",
+    "format": "<template>\n    <v-card class=\"pa-4\">\n        <v-card-title>Stored settings</v-card-title>\n        <v-text-field v-model=\"form.name\" label=\"Name\" :loading=\"loading\" />\n        <v-slider v-model=\"form.level\" label=\"Level\" min=\"0\" max=\"100\" thumb-label />\n        <v-switch v-model=\"form.enabled\" label=\"Enabled\" color=\"primary\" />\n        <v-btn color=\"primary\" @click=\"save\">Save</v-btn>\n    </v-card>\n</template>\n\n<script>\nexport default {\n    data () {\n        return {\n            loading: true,\n            form: { name: '', level: 50, enabled: false }\n        }\n    },\n    mounted () {\n        // Ask the flow for the stored data as soon as the component is mounted\n        this.send({ topic: 'load' })\n    },\n    watch: {\n        // `msg` is updated whenever the node receives a message from the flow\n        msg (msg) {\n            if (msg && msg.topic === 'data') {\n                this.form = Object.assign({}, this.form, msg.payload)\n                this.loading = false\n            }\n        }\n    },\n    methods: {\n        save () {\n            this.send({ topic: 'save', payload: { ...this.form } })\n        }\n    }\n}\n</script>\n",
+    "storeOutMessages": true,
+    "passthru": false,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 300,
+    "y": 120,
+    "wires": [
+      [
+        "fn1"
+      ]
+    ],
+    "z": "tab1"
+  },
+  {
+    "id": "fn1",
+    "type": "function",
+    "z": "tab1",
+    "name": "load / save",
+    "func": "if (msg.topic === 'load') {\n    return { topic: 'data', payload: flow.get('settings', 'file') || {} };\n}\nif (msg.topic === 'save') {\n    flow.set('settings', msg.payload, 'file');\n    return { topic: 'data', payload: msg.payload };\n}\nreturn null;",
+    "outputs": 1,
+    "x": 500,
+    "y": 120,
+    "wires": [
+      [
+        "tpl1"
+      ]
+    ]
+  }
+]
