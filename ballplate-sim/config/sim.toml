@@ -1,0 +1,51 @@
+# Ball-on-table simulator configuration
+
+[opcua]
+# The CODESYS runtime on the Raspberry Pi is the OPC UA *server*;
+# this simulator is the OPC UA *client*.
+url        = "opc.tcp://192.168.1.50:4840"
+# username / password are optional (CODESYS: configure users on the device)
+# username = "sim"
+# password = "secret"
+# Optional security, e.g. "Basic256Sha256,SignAndEncrypt,client_cert.pem,client_key.pem"
+# security = ""
+timeout_s  = 2.0
+
+# Node ids are built from this template.  Check the real ones with
+# `python -m tools.browse_nodes <url>` (CODESYS symbol ids look like
+# ns=4;s=|var|CODESYS Control for Raspberry Pi SL.Application.GVL_Sim.Ball_X)
+namespace  = 4
+device     = "CODESYS Control for Raspberry Pi SL"
+node_template = "ns={ns};s=|var|{device}.Application.GVL_Sim.{name}"
+
+[sim]
+cycle_ms      = 10      # OPC UA exchange + visualisation period
+physics_dt_ms = 1       # integrator step (cycle_ms must be a multiple)
+comm_timeout_s = 1.0    # after this long without a PLC reply, table levels itself
+params_period_s = 0.5   # how often the slow tuning parameters are re-read
+
+[table]
+size_m        = 0.40
+ball_radius_m = 0.02
+ball_mass_kg  = 0.05
+tilt_max_deg  = 15.0
+tilt_rate_deg_s = 60.0
+tilt_tau_s    = 0.05
+
+# Defaults for parameters that can also be changed live from the PLC (GVL_Sim)
+[contact]
+mu_s   = 0.35
+mu_k   = 0.25
+c_rr   = 0.002
+e_wall = 0.6
+mu_wall = 0.2
+
+[sensor]
+noise_mm = 0.3
+delay_ms = 20
+
+[visual]
+# Where the Godot visualisation listens (UDP, JSON)
+host = "127.0.0.1"
+port = 9870
+enabled = true
