@@ -2,7 +2,7 @@
 // Plant is (almost) a double integrator:  x'' = (5/7) * g * theta
 // so a PD law with the 5/7*g gain scaled out gives chosen wn / zeta:
 //     theta = ( wn^2 * (sp - x) - 2*zeta*wn * (v_hat - sp_vel) ) / k
-// Same algorithm as CascadePD in ballplate/mock_plc.py.
+// Same algorithm as CascadePD in ballplate/mock_plc.py (which is tested against the simulator).
 FUNCTION_BLOCK FB_BallCtrl
 VAR_INPUT
     bEnable     : BOOL;
@@ -10,7 +10,7 @@ VAR_INPUT
     rSetpointVel: REAL;                 // m/s velocity feed-forward (0 for fixed setpoint)
     rPos        : REAL;                 // m, measured
     rDt         : REAL := 0.01;         // s, task cycle time (use the task interval!)
-    rWn         : REAL := 2.5;          // rad/s  closed-loop natural frequency
+    rWn         : REAL := 1.5;          // rad/s  closed-loop natural frequency
     rZeta       : REAL := 0.9;
     rVelTau     : REAL := 0.06;         // s, velocity filter time constant
     rKi         : REAL := 0.15;         // integral gain (fights rolling resistance)

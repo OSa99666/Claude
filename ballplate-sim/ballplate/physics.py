@@ -18,6 +18,14 @@ Contact model
   which couples to the vertical-axis spin (omega_z).  So a ball hitting a
   wall at an angle leaves with spin and a non-mirror exit angle.
 
+Extras used by the PLC-facing simulator
+---------------------------------------
+* ``walls_enabled = False`` removes the walls; a ball whose centre leaves the
+  table falls off (ballistic fall, ``off_table`` = True) until ``center()``.
+* ``hold_vx/hold_vy`` force the ball velocity (rolling-consistent spin) and
+  ``hold_x/hold_y`` pin the ball position while they are not None.
+* ``limit_velocity`` clamps each velocity component to [v_min, v_max].
+
 Solid sphere: I = 2/5 m R^2, so the effective tangential mass at a contact
 is 2m/7 (this is where the famous 5/7 g sin(theta) comes from).
 """
@@ -31,9 +39,10 @@ G = 9.81
 
 @dataclass
 class Params:
-    table_size: float = 0.40      # m, square side length
-    ball_radius: float = 0.02     # m
-    ball_mass: float = 0.05       # kg (cancels out of the motion; kept for N, F)
+    table_size: float = 2.0       # m, square side length
+    ball_radius: float = 0.06     # m (12 cm diameter)
+    ball_mass: float = 0.5        # kg (cancels out of the motion; kept for N, F)
+    wall_height: float = 0.12     # m (visual only)
     mu_s: float = 0.35            # ball/table static friction
     mu_k: float = 0.25            # ball/table kinetic friction
     c_rr: float = 0.002           # rolling resistance (decel = c_rr * g)
@@ -41,6 +50,11 @@ class Params:
     mu_wall: float = 0.2          # ball/wall friction
     e_rest_speed: float = 0.02    # m/s, impacts slower than this are inelastic
     spin_damping: float = 1.0     # 1/s, decay of vertical-axis spin
+    walls_enabled: bool = True
+    limit_velocity: bool = False  # clamp each velocity component to [v_min, v_max]
+    v_min: float = -0.4           # m/s
+    v_max: float = 0.4
+    fall_depth: float = 1.5       # m, a ball that left the table stops this far below it
     # actuator
     tilt_max_deg: float = 15.0
     tilt_rate_deg_s: float = 60.0
@@ -60,6 +74,9 @@ class State:
     tilt_x: float = 0.0   # rad, actual
     tilt_y: float = 0.0
     slipping: bool = False
+    z: float = 0.0        # height above the table plane (only != 0 when off the table)
+    vz: float = 0.0
+    off_table: bool = False
 
 
 def _quat_integrate(q, wx, wy, wz, dt):
@@ -84,6 +101,10 @@ class BallPlate:
     tilt_sp_x: float = 0.0   # rad, commanded
     tilt_sp_y: float = 0.0
     last_impact_speed: float = 0.0
+    hold_vx: float | None = None
+    hold_vy: float | None = None
+    hold_x: float | None = None
+    hold_y: float | None = None
 
     # ------------------------------------------------------------------ API
     def reset(self, x=0.0, y=0.0, vx=0.0, vy=0.0):
@@ -94,6 +115,11 @@ class BallPlate:
         self.s.wy = vx / R
         self.s.wx = -vy / R
 
+    def center(self):
+        """Ball to the table centre, at rest, back on the table."""
+        self.reset(0.0, 0.0)
+        self.s.wx = self.s.wy = self.s.wz = 0.0
+
     def set_tilt_setpoint_deg(self, tx_deg: float, ty_deg: float):
         m = self.p.tilt_max_deg
         self.tilt_sp_x = math.radians(max(-m, min(m, tx_deg)))
@@ -101,7 +127,11 @@ class BallPlate:
 
     def step(self, dt: float):
         self._step_actuator(dt)
+        if self.s.off_table:
+            self._step_fall(dt)
+            return
         self._step_ball(dt)
+        self._apply_limits_and_holds()
         self._step_walls()
 
     # ------------------------------------------------------------ internals
@@ -165,9 +195,45 @@ class BallPlate:
         s.y += s.vy * dt
         s.q = _quat_integrate(s.q, s.wx, s.wy, s.wz, dt)
 
+    def _apply_limits_and_holds(self):
+        p, s = self.p, self.s
+        R = p.ball_radius
+        if p.limit_velocity:
+            s.vx = max(p.v_min, min(p.v_max, s.vx))
+            s.vy = max(p.v_min, min(p.v_max, s.vy))
+        if self.hold_vx is not None:
+            s.vx = self.hold_vx
+            s.wy = s.vx / R          # keep rolling-consistent spin
+        if self.hold_vy is not None:
+            s.vy = self.hold_vy
+            s.wx = -s.vy / R
+        if self.hold_x is not None:
+            s.x = self.hold_x
+        if self.hold_y is not None:
+            s.y = self.hold_y
+
+    def _step_fall(self, dt):
+        """Ball that left the table: free fall, keeps its horizontal velocity."""
+        s = self.s
+        s.x += s.vx * dt
+        s.y += s.vy * dt
+        s.vz -= G * dt
+        s.z += s.vz * dt
+        if s.z < -self.p.fall_depth:
+            s.z = -self.p.fall_depth
+            s.vx = s.vy = s.vz = 0.0
+        s.q = _quat_integrate(s.q, s.wx, s.wy, s.wz, dt)
+
     def _step_walls(self):
         p, s = self.p, self.s
-        lim = 0.5 * p.table_size - p.ball_radius
+        half = 0.5 * p.table_size
+        if not p.walls_enabled:
+            if abs(s.x) > half or abs(s.y) > half:   # centre over the edge: it falls
+                s.off_table = True
+                s.vz = 0.0
+                s.z = 0.0
+            return
+        lim = half - p.ball_radius
         # (outward normal) for the four walls; x walls first, then y walls
         if s.x > lim:
             s.x = lim;  self._wall_impact(1.0, 0.0)

@@ -1,88 +1,75 @@
-# Ball on a tilting table - PLC control demo
+# Rolling table - PLC control demo (v2: simulator is the OPC UA server)
 
-A solid ball rolls on a square tilting table.  A **CODESYS PLC (Raspberry Pi)** controls the two tilt
-angles; a **Linux PC** simulates the physics and renders it in **Godot**.  All process data goes over
-**OPC UA**.
+A solid ball (12 cm) rolls on a 2 m x 2 m tilting table with 12 cm walls.  A **PLC** (CODESYS on a
+Raspberry Pi) controls the two tilt angles; a **Linux PC** simulates the physics and shows it in **Godot**,
+which is also the user interface for the simulation parameters.
 
 ```
- Raspberry Pi                        Linux PC
-┌──────────────────┐   OPC UA    ┌────────────────────────┐  UDP/JSON  ┌────────────┐
-│ CODESYS runtime  │◄───────────►│ Python simulator       │───────────►│ Godot 4    │
-│ PID  (server)    │  port 4840  │ physics @1 kHz (client)│  port 9870 │ 3D view    │
-└──────────────────┘             └────────────────────────┘            └────────────┘
+ PLC (OPC UA client)             Linux PC
+┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9870 state   ┌──────────────────────┐
+│ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view + UI  │
+│ Data Source Mgr  │ port 4840 │ physics @1 kHz, server  │◄──────────────────│ parameters, commands │
+└──────────────────┘           └─────────────────────────┘  UDP 9871 UI      └──────────────────────┘
 ```
 
-* The PLC is the OPC UA **server**; the simulator is the **client** (reads `TiltX_SP`, `TiltY_SP`,
-  writes the sensor values).
-* Physics is deliberately in Python, not Godot: fixed 1 ms step independent of frame rate, headless and
-  unit-testable.  Godot only draws what it receives.
+Only **eight INT words** go over OPC UA (same names as the PLC's `gIo`):
 
-## Physics (ballplate/physics.py)
+| Variable | Direction | Raw ±32000 means |
+|---|---|---|
+| `F_YR10`, `F_YR20` | PLC → sim | ±15° tilt X / Y (>0 accelerates the ball towards +X / +Y) |
+| `F_XG10`, `F_XG20` | sim → PLC | ±9.81 m/s² acceleration X / Y (negative allowed) |
+| `F_XG11`, `F_XG21` | sim → PLC | `vel_min`..`vel_max` (default ±0.4 m/s) velocity X / Y |
+| `F_XG12`, `F_XG22` | sim → PLC | ±1 m distance X / Y (centre = 0) |
 
-Solid sphere, table frame, tilt convention: `TiltX > 0` => ball accelerates towards **+X** (same for Y).
+Scaling lives in `config/sim.toml` (`[scaling]`); the PLC must use the same ranges.
 
-* Ball/table Coulomb friction with **static (mu_s)** and **kinetic (mu_k)** coefficients.  Each step
-  computes the friction that would give pure rolling; if it exceeds `mu_s*N` the ball slips under
-  `mu_k*N`.  Rolling gives `a = 5/7 g sin(theta)`; slipping occurs when `tan(theta) > 3.5 mu_s`.
-  A ball released sliding ends up rolling at 5/7 of its speed (tested).
-* Rolling resistance `c_rr`.
-* Walls: restitution `e_wall` (1 = elastic ... 0 = no bounce) and wall friction `mu_wall` coupled to
-  vertical-axis spin, so oblique hits leave with spin and a non-mirror angle.
-* Tilt actuator: first-order lag, +-15 deg limit, 60 deg/s rate limit.
-* Sensor seen by the PLC: Gaussian noise and a transport delay (both tunable from the PLC).
-* Fail-safe: if the PLC link drops for more than 1 s the table levels itself.
+## Parameters and commands (Godot panel, top right)
+
+| UI control | Meaning (old PLC name) |
+|---|---|
+| Elasticity | wall restitution 0..1 (`PELAC`); **negative removes the walls** - the ball can then roll off the table and falls; its `F_XG..` words read 0 |
+| Static / dynamic friction | ball/table friction coefficients (`PFRS`, `PFRD`) |
+| Min / max velocity | range for the raw velocity word (`PVLR`, `PVHR`); optional checkbox clamps the ball's velocity to it |
+| Velocity setpoint X/Y + *Set velocity* | forces the ball velocity while checked (`PVSPX/Y`, `RX11/RX21`) |
+| Distance setpoint X/Y + *Set distance* | pins the ball position while checked (`PDSPX/Y`, `RX12/RX22`) |
+| **Center ball** | ball to the centre, at rest, back on the table (`RXBL`) |
+
+Mouse: drag to orbit, wheel to zoom.  With **no OPC UA client connected the table levels itself**.
+
+## Physics (`ballplate/physics.py`)
+
+Solid sphere, table frame.  Ball/table Coulomb friction with static and kinetic coefficients (rolling
+`a = 5/7·g·sin θ`; it slips when `tan θ > 3.5·μs`), rolling resistance, walls with normal restitution and
+wall friction that couples into vertical-axis spin.  Tilt actuator: first-order lag, ±15°, 60°/s rate limit.
+Setpoints/holds, velocity clamp and the falling ball are in the same file.
 
 ## Quick start
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-pytest                                   # physics + closed-loop tests
+pytest                                    # 23 tests incl. a real OPC UA round trip
 ```
 
-### Without hardware (mock PLC)
+Without a PLC (a mock client plays the PLC):
 
 ```bash
-python -m ballplate.mock_plc --pattern circle    # pretend CODESYS: OPC UA server + controller
-python -m ballplate.sim --url opc.tcp://127.0.0.1:4840
-godot --path godot                               # optional 3D view (Godot 4.2+)
+python -m ballplate.sim                                  # server on opc.tcp://0.0.0.0:4840  (takes ~2 s to start)
+python -m ballplate.mock_plc --pattern circle            # client: PD controller, patterns center|circle|square
+godot --path godot                                       # 3D view + UI (Godot 4.2+)
 ```
-`--pattern` is `center`, `circle` or `square`.
 
-### With the real PLC
+With the real PLC: start the simulator, open TCP 4840 on the PC, then connect from CODESYS (see
+[`codesys/README.md`](codesys/README.md)).  If Godot runs on another machine set `[visual] host` in
+`config/sim.toml` to its address; Godot sends its UI values back to whichever address the state comes from.
+`python -m tools.browse_nodes opc.tcp://<pc>:4840` lists what the server exposes.
 
-1. Set up CODESYS as described in [`codesys/README.md`](codesys/README.md).
-2. Edit `config/sim.toml`: `opcua.url` (Pi address), `namespace`, `device`, credentials if used.
-   `python -m tools.browse_nodes opc.tcp://<pi>:4840` prints the node ids.
-3. `python -m ballplate.sim`, then `godot --path godot`.
-   (If Godot runs on another PC set `[visual] host` to its address.)
+## Status
 
-## OPC UA variables (`GVL_Sim`)
-
-| Name | Dir (from PLC) | Unit | Meaning |
-|---|---|---|---|
-| `Ball_X`, `Ball_Y` | in | m | ball position as measured (noise + delay), centre = 0 |
-| `TiltX_PV`, `TiltY_PV` | in | deg | actual table slope |
-| `Heartbeat` | in | - | DINT, increments each 10 ms cycle |
-| `TiltX_SP`, `TiltY_SP` | out | deg | commanded slope |
-| `Cmd_Reset` | out | - | rising edge: ball to `Reset_X/Reset_Y` |
-| `Reset_X`, `Reset_Y` | out | m | |
-| `Mu_S`, `Mu_K`, `E_Wall`, `Mu_Wall` | out | - | contact parameters, live |
-| `Noise_mm`, `Delay_ms` | out | mm, ms | sensor imperfections, live |
-
-The simulator reads the data type of each node on connect and writes with exactly that type, so
-`REAL`/`LREAL`/`DINT` all work.
-
-## Status / what was verified
-
-* `pytest`: 14 tests pass (rolling acceleration, slip threshold, slide-to-roll 5/7, restitution,
-  energy, wall spin, containment, actuator limits, and closed loop with noise and delay).
-* End-to-end over real OPC UA (asyncua mock server <-> simulator): ball captured and held at the
-  centre.
-* **Not verified:** the Godot scene (could not run Godot in the build environment), the CODESYS ST
-  code (not compiled), and the real Raspberry Pi connection.  Expect to fix small things there.
-
-## Ideas
-
-Replace polling with OPC UA subscriptions for `TiltX_SP/TiltY_SP`; add a keyboard "poke the ball"
-disturbance in Godot; run a second controller (MPC) in the PLC; use the Pi's real-time kernel.
+* Verified here: all 23 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
+  client talking to the simulator: Int16 variables, tilt → ball motion, hold velocity/position, centring,
+  walls removed → ball off table → outputs 0).
+* **Not verified:** the new Godot UI (not run here), the CODESYS ST example (not compiled), and the
+  connection from the real Pi / Data Source Manager.
+* Decisions to check: acceleration range ±9.81 m/s² (old model used 0..g); the velocity range defaults to
+  ±0.4 m/s as in `prgSimulation`, but the ball is only clamped to it if you tick the box.

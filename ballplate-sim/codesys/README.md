@@ -1,26 +1,36 @@
 # CODESYS side (Raspberry Pi)
 
-CODESYS Control for Raspberry Pi SL runs the controller and acts as the **OPC UA server**.
-The simulator connects as a client and exchanges the variables in `GVL_Sim`.
+The **simulator is the OPC UA server** (default `opc.tcp://<pc-ip>:4840`).  The PLC connects to it as an
+OPC UA *client*, for example through the CODESYS **Data Source Manager**, and maps the simulator's
+variables onto the IO words in `gIo`.
 
-1. New standard project -> device *CODESYS Control for Raspberry Pi SL* (ST language).
-2. Add a **Global Variable List** named `GVL_Sim`, paste `GVL_Sim.st` (the `VAR_GLOBAL` block).
-3. Add a **Function Block** `FB_BallCtrl` (ST) and paste the file; make **PLC_PRG** from `PLC_PRG.st`
-   (the `VAR` part goes in the declaration editor, the rest in the body).
-   `FB_BallCtrl.st` and `PLC_PRG.st` each contain declaration and body in one file for readability.
-4. Task configuration: `PlcTask` cyclic, **10 ms**, calling `PLC_PRG`.
-5. Add **Symbol Configuration**, tick *Support OPC UA features*, tick `GVL_Sim` and give the variables
-   Read/Write access.  Download to the Pi.
-6. On the Pi's runtime enable OPC UA (default port 4840) and create a user/password or allow anonymous
-   for a first test.  Make sure TCP 4840 is open.
-7. Find the node ids: `python -m tools.browse_nodes opc.tcp://<pi-ip>:4840` and compare with
-   `node_template` in `config/sim.toml`.  Typically `ns=4;s=|var|CODESYS Control for Raspberry Pi SL.Application.GVL_Sim.Ball_X`.
+## Variables exposed by the simulator
 
-Operator inputs in `PLC_PRG` (`bRun`, `bCircle`, `rSpX`, `rSpY`, `rRadius`, `rPeriod`) can be changed
-online in the CODESYS debugger or written over OPC UA.  Pulse `GVL_Sim.Cmd_Reset` to drop the ball at
-`Reset_X`/`Reset_Y`.  Tune `Mu_S`, `E_Wall`, ... online to see the controller cope with a slippery or
-bouncy ball.
+Namespace URI `urn:ballplate:simulation` (index differs per client - browse for it), folder `RollingTable`,
+node ids are the string names below.  All variables are **Int16 (INT)**.
 
-Note: this ST has not been compiled in CODESYS (no runtime available while writing it).  It mirrors
-`CascadePD` in `ballplate/mock_plc.py`, which is tested.  If the compiler objects to a detail
-(e.g. the `VAR CONSTANT` typing), the algorithm is the five lines at the end of `FB_BallCtrl`.
+| Variable | Direction | Raw range | Meaning |
+|---|---|---|---|
+| `F_YR10` | PLC -> sim | +-32000 = +-15 deg | Tilt X (>0: ball accelerates towards +X) |
+| `F_YR20` | PLC -> sim | +-32000 = +-15 deg | Tilt Y (>0: ball accelerates towards +Y) |
+| `F_XG10` | sim -> PLC | +-32000 = +-9.81 m/s^2 | Acceleration X (negative allowed) |
+| `F_XG11` | sim -> PLC | -32000..32000 = vel_min..vel_max (default +-0.4 m/s) | Velocity X |
+| `F_XG12` | sim -> PLC | +-32000 = +-1 m | Distance X (table centre = 0) |
+| `F_XG20`, `F_XG21`, `F_XG22` | sim -> PLC | as above | Acceleration / velocity / distance Y |
+
+The velocity range is edited in the Godot UI; use the same range in the PLC scaling.
+If the ball is off the table (walls removed) all six `F_XG..` words are 0.
+Everything else (elasticity, friction, forced velocity/position, centring the ball) is set in the
+Godot UI, not over OPC UA.
+
+## Connecting
+
+1. Start the simulator on the PC (`python -m ballplate.sim`).  Make sure TCP 4840 is reachable from the Pi
+   (firewall: `sudo firewall-cmd --add-port=4840/tcp` on Fedora, `sudo ufw allow 4840/tcp` on Ubuntu).
+2. In CODESYS add the OPC UA connection in the Data Source Manager, endpoint `opc.tcp://<pc-ip>:4840`,
+   security *None* / anonymous for the first test (set `username`/`password` in `config/sim.toml` to require a login),
+   and map the eight variables to `gIo.F_YR10 ... gIo.F_XG22`.
+3. With **no client connected** the simulator keeps the table level (fail-safe).
+
+`PLC_PRG_Example.st` + `FB_BallCtrl.st` are a small PD controller using these words.  They have not been
+compiled in CODESYS; the same algorithm (`CascadePD` in `ballplate/mock_plc.py`) is tested against the simulator.

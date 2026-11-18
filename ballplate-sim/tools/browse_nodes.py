@@ -1,6 +1,6 @@
-"""List the OPC UA variables under the CODESYS Application so you can copy node ids.
+"""List the OPC UA nodes of a server (e.g. this simulator, to see the RollingTable variables).
 
-    python -m tools.browse_nodes opc.tcp://192.168.1.50:4840 [user password]
+    python -m tools.browse_nodes opc.tcp://127.0.0.1:4840 [user password]
 """
 import asyncio
 import sys

@@ -1,30 +1,44 @@
 extends Node3D
-## Visualisation only: all physics runs in the Python simulator, which streams
-## the state as JSON over UDP (default port 9870).
+## Rolling-table user interface + 3D view.
+##
+## All physics runs in the Python simulator.  This program
+##  * receives the state as JSON over UDP (default port 9870) and draws it,
+##  * sends the parameter/command values from the panel back to the simulator
+##    (UDP, port 9871, to the address the state packets come from).
 ##
 ## Simulator frame -> Godot frame:  (x, y, z) -> (x, z, -y)
 ## Tilt convention: tilt_x > 0 => surface slopes down towards +X (sim frame),
 ##                  tilt_y > 0 => surface slopes down towards +Y.
 ##
-## Run:  godot --path godot -- --port 9870
+## Run:  godot --path godot -- [--port 9870] [--cmd-port 9871]
 
 var port := 9870
-var udp := PacketPeerUDP.new()
+var cmd_port := 9871
+var udp := PacketPeerUDP.new()      # receives state
+var cmd := PacketPeerUDP.new()      # sends UI values
+var sim_host := ""
 
 var table := Node3D.new()
 var ball := MeshInstance3D.new()
+var walls: Array[MeshInstance3D] = []
 var cam := Camera3D.new()
 var hud := Label.new()
+var panel := PanelContainer.new()
+var controls := {}                  # key -> SpinBox / CheckBox
+var center_seq := 0
+var ui_ready := false
+var send_timer := 0.0
 
 var built_L := -1.0
 var built_R := -1.0
+var built_wh := -1.0
 var msg := {}
 var last_rx_ms := -100000
 
 # orbit camera
 var yaw := 0.7
 var pitch := 0.65
-var dist := 0.95
+var dist := 4.8
 
 
 func _ready() -> void:
@@ -32,6 +46,8 @@ func _ready() -> void:
 	for i in args.size():
 		if args[i] == "--port" and i + 1 < args.size():
 			port = int(args[i + 1])
+		elif args[i] == "--cmd-port" and i + 1 < args.size():
+			cmd_port = int(args[i + 1])
 	var err := udp.bind(port)
 	if err != OK:
 		push_error("cannot bind UDP port %d (error %d)" % [port, err])
@@ -53,17 +69,117 @@ func _ready() -> void:
 	add_child(table)
 	add_child(cam)
 	cam.current = true
-	_update_camera()
 
 	var layer := CanvasLayer.new()
 	hud.position = Vector2(12, 8)
-	hud.add_theme_font_size_override("font_size", 18)
+	hud.add_theme_font_size_override("font_size", 16)
 	layer.add_child(hud)
+	_build_panel(layer)
 	add_child(layer)
 
-	_build(0.40, 0.02)
+	_build(2.0, 0.06, 0.12)
 
 
+# ------------------------------------------------------------------ UI panel
+func _build_panel(layer: CanvasLayer) -> void:
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 0.0
+	panel.offset_left = -400
+	panel.offset_right = -10
+	panel.offset_top = 10
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.visible = false
+	layer.add_child(panel)
+
+	var box := VBoxContainer.new()
+	panel.add_child(box)
+
+	_heading(box, "Dynamics")
+	_spin(box, "Elasticity (<0: no walls)", -1.0, 1.0, 0.05, "elasticity")
+	_spin(box, "Static friction", 0.0, 1.5, 0.01, "mu_s")
+	_spin(box, "Dynamic friction", 0.0, 1.5, 0.01, "mu_k")
+	_heading(box, "Velocity range [m/s]  (raw scaling)")
+	_spin(box, "Min velocity", -5.0, 0.0, 0.05, "vel_min")
+	_spin(box, "Max velocity", 0.0, 5.0, 0.05, "vel_max")
+	_check(box, "Limit ball velocity to range", "limit_velocity")
+	_heading(box, "Forced velocity [m/s]")
+	_spin(box, "Velocity setpoint X", -3.0, 3.0, 0.05, "vel_sp_x")
+	_check(box, "Set velocity X  (RX11)", "hold_vx")
+	_spin(box, "Velocity setpoint Y", -3.0, 3.0, 0.05, "vel_sp_y")
+	_check(box, "Set velocity Y  (RX21)", "hold_vy")
+	_heading(box, "Forced position [m]")
+	_spin(box, "Distance setpoint X", -1.5, 1.5, 0.05, "dist_sp_x")
+	_check(box, "Set distance X  (RX12)", "hold_x")
+	_spin(box, "Distance setpoint Y", -1.5, 1.5, 0.05, "dist_sp_y")
+	_check(box, "Set distance Y  (RX22)", "hold_y")
+	var b := Button.new()
+	b.text = "Center ball  (RXBL)"
+	b.pressed.connect(_on_center)
+	box.add_child(b)
+
+
+func _heading(parent: Control, text: String) -> void:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0))
+	parent.add_child(l)
+
+
+func _spin(parent: Control, text: String, lo: float, hi: float, step: float, key: String) -> void:
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = text
+	l.custom_minimum_size = Vector2(230, 0)
+	var sb := SpinBox.new()
+	sb.min_value = lo
+	sb.max_value = hi
+	sb.step = step
+	sb.value_changed.connect(func(_v: float) -> void: _send_ui())
+	row.add_child(l)
+	row.add_child(sb)
+	parent.add_child(row)
+	controls[key] = sb
+
+
+func _check(parent: Control, text: String, key: String) -> void:
+	var cb := CheckBox.new()
+	cb.text = text
+	cb.toggled.connect(func(_on: bool) -> void: _send_ui())
+	parent.add_child(cb)
+	controls[key] = cb
+
+
+func _fill_ui(p: Dictionary) -> void:
+	# initial values come from the simulator, without triggering a send
+	for k in p:
+		if controls.has(k):
+			var c = controls[k]
+			if c is SpinBox:
+				c.set_value_no_signal(float(p[k]))
+			elif c is CheckBox:
+				c.set_pressed_no_signal(bool(p[k]))
+	panel.visible = true
+	ui_ready = true
+
+
+func _on_center() -> void:
+	center_seq += 1
+	_send_ui()
+
+
+func _send_ui() -> void:
+	if not ui_ready or sim_host == "":
+		return
+	var d := {"center_seq": center_seq}
+	for k in controls:
+		var c = controls[k]
+		d[k] = c.value if c is SpinBox else c.button_pressed
+	cmd.put_packet(JSON.stringify(d).to_utf8_buffer())
+
+
+# --------------------------------------------------------------- scene build
 func _make_ball_material() -> StandardMaterial3D:
 	# checker pattern so rolling and spin are visible
 	var img := Image.create(64, 32, false, Image.FORMAT_RGB8)
@@ -90,22 +206,26 @@ func _box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	return mi
 
 
-func _build(L: float, R: float) -> void:
+func _build(L: float, R: float, wh: float) -> void:
 	for c in table.get_children():
-		c.queue_free()
+		if c != ball:
+			c.queue_free()
+	walls.clear()
 	built_L = L
 	built_R = R
-	var t := 0.012                   # wall thickness
-	var h := maxf(0.04, 3.0 * R)     # wall height
-	table.add_child(_box(Vector3(L + 2 * t, 0.02, L + 2 * t), Vector3(0, -0.01, 0), Color(0.78, 0.74, 0.62)))
+	built_wh = wh
+	var t := 0.03                      # wall thickness
 	var wc := Color(0.35, 0.37, 0.42)
-	table.add_child(_box(Vector3(t, h, L + 2 * t), Vector3(L / 2 + t / 2, h / 2, 0), wc))
-	table.add_child(_box(Vector3(t, h, L + 2 * t), Vector3(-L / 2 - t / 2, h / 2, 0), wc))
-	table.add_child(_box(Vector3(L, h, t), Vector3(0, h / 2, L / 2 + t / 2), wc))
-	table.add_child(_box(Vector3(L, h, t), Vector3(0, h / 2, -L / 2 - t / 2), wc))
-	# centre mark
-	table.add_child(_box(Vector3(0.02, 0.0015, 0.002), Vector3(0, 0.0008, 0), Color(0.2, 0.2, 0.2)))
-	table.add_child(_box(Vector3(0.002, 0.0015, 0.02), Vector3(0, 0.0008, 0), Color(0.2, 0.2, 0.2)))
+	table.add_child(_box(Vector3(L + 2 * t, 0.04, L + 2 * t), Vector3(0, -0.02, 0), Color(0.78, 0.74, 0.62)))
+	walls.append(_box(Vector3(t, wh, L + 2 * t), Vector3(L / 2 + t / 2, wh / 2, 0), wc))
+	walls.append(_box(Vector3(t, wh, L + 2 * t), Vector3(-L / 2 - t / 2, wh / 2, 0), wc))
+	walls.append(_box(Vector3(L, wh, t), Vector3(0, wh / 2, L / 2 + t / 2), wc))
+	walls.append(_box(Vector3(L, wh, t), Vector3(0, wh / 2, -L / 2 - t / 2), wc))
+	for w in walls:
+		table.add_child(w)
+	# centre cross
+	table.add_child(_box(Vector3(0.2, 0.004, 0.01), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
+	table.add_child(_box(Vector3(0.01, 0.004, 0.2), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
 
 	var sm := SphereMesh.new()
 	sm.radius = R
@@ -114,30 +234,47 @@ func _build(L: float, R: float) -> void:
 	ball.material_override = _make_ball_material()
 	if ball.get_parent() == null:
 		table.add_child(ball)
-	else:
-		ball.reparent(table, false)
-	# keep ball as last child (queue_free removed the others)
 	ball.position = Vector3(0, R, 0)
 	dist = 2.4 * L
 	_update_camera()
 
 
-func _process(_dt: float) -> void:
+# ------------------------------------------------------------------- per frame
+func _process(delta: float) -> void:
 	while udp.get_available_packet_count() > 0:
-		var parsed = JSON.parse_string(udp.get_packet().get_string_from_utf8())
+		var pkt := udp.get_packet()
+		var ip := udp.get_packet_ip()
+		var parsed = JSON.parse_string(pkt.get_string_from_utf8())
 		if parsed is Dictionary:
 			msg = parsed
 			last_rx_ms = Time.get_ticks_msec()
+			if ip != sim_host:
+				sim_host = ip
+				cmd.close()
+				cmd.set_dest_address(sim_host, cmd_port)
+			if not ui_ready and msg.has("params"):
+				_fill_ui(msg["params"])
 
 	var live := Time.get_ticks_msec() - last_rx_ms < 1000
 	if msg.is_empty() or not live:
 		hud.text = "Waiting for simulator on UDP port %d ..." % port
+		panel.visible = false
+		ui_ready = false      # re-read parameters if the simulator restarted
 		return
 
-	var L := float(msg.get("L", 0.4))
-	var R := float(msg.get("R", 0.02))
-	if absf(L - built_L) > 1e-6 or absf(R - built_R) > 1e-6:
-		_build(L, R)
+	send_timer += delta
+	if send_timer > 0.2:      # periodic resend, so lost packets or a restarted simulator recover
+		send_timer = 0.0
+		_send_ui()
+
+	var L := float(msg.get("L", 2.0))
+	var R := float(msg.get("R", 0.06))
+	var wh := float(msg.get("wh", 0.12))
+	if absf(L - built_L) > 1e-6 or absf(R - built_R) > 1e-6 or absf(wh - built_wh) > 1e-6:
+		_build(L, R, wh)
+	var walls_on := bool(msg.get("walls", true))
+	for w in walls:
+		w.visible = walls_on
 
 	# table orientation from the two slopes
 	var tx := tan(float(msg["tx"]))
@@ -147,17 +284,22 @@ func _process(_dt: float) -> void:
 	var ya := za.cross(xa).normalized()
 	table.basis = Basis(xa, ya, za).orthonormalized()
 
-	# ball (child of the table, table-local coordinates)
-	ball.position = Vector3(float(msg["x"]), R, -float(msg["y"]))
+	# ball (child of the table, table-local coordinates; z < 0 = falling off)
+	ball.position = Vector3(float(msg["x"]), R + float(msg.get("z", 0.0)), -float(msg["y"]))
 	var q: Array = msg["q"]   # w, x, y, z in the simulator frame
 	ball.quaternion = Quaternion(float(q[1]), float(q[3]), -float(q[2]), float(q[0])).normalized()
 
-	hud.text = "ball  x %+6.1f mm   y %+6.1f mm   [%s]\ntilt  X %+5.1f deg   Y %+5.1f deg\nPLC link: %s   mu_s %.2f   e_wall %.2f" % [
-		float(msg["x"]) * 1000.0, float(msg["y"]) * 1000.0,
-		"SLIPPING" if msg.get("slip", false) else "rolling",
+	var raw: Dictionary = msg.get("raw", {})
+	var tr: Array = msg.get("tilt_raw", [0, 0])
+	var state := "BALL OFF TABLE" if msg.get("off", false) else ("slipping" if msg.get("slip", false) else "rolling")
+	hud.text = "ball  x %+6.3f m   y %+6.3f m   [%s]\ntilt  X %+5.1f deg   Y %+5.1f deg   walls: %s\nOPC UA clients: %d%s\n\nF_YR10 %6d   F_YR20 %6d\nF_XG10 %6d   F_XG11 %6d   F_XG12 %6d\nF_XG20 %6d   F_XG21 %6d   F_XG22 %6d" % [
+		float(msg["x"]), float(msg["y"]), state,
 		rad_to_deg(float(msg["tx"])), rad_to_deg(float(msg["ty"])),
-		"OK" if msg.get("plc", false) else "NO PLC (table levelled)",
-		float(msg.get("mu_s", 0.0)), float(msg.get("e", 0.0))]
+		"on" if walls_on else "REMOVED",
+		int(msg.get("clients", 0)), "" if msg.get("plc", false) else "   (no PLC - table levelled)",
+		int(tr[0]), int(tr[1]),
+		int(raw.get("F_XG10", 0)), int(raw.get("F_XG11", 0)), int(raw.get("F_XG12", 0)),
+		int(raw.get("F_XG20", 0)), int(raw.get("F_XG21", 0)), int(raw.get("F_XG22", 0))]
 
 
 func _unhandled_input(ev: InputEvent) -> void:
@@ -167,10 +309,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_update_camera()
 	elif ev is InputEventMouseButton and ev.pressed:
 		if ev.button_index == MOUSE_BUTTON_WHEEL_UP:
-			dist = maxf(0.3, dist * 0.92)
+			dist = maxf(0.5, dist * 0.92)
 			_update_camera()
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			dist = minf(3.0, dist * 1.08)
+			dist = minf(30.0, dist * 1.08)
 			_update_camera()
 
 
