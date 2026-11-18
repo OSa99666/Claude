@@ -45,6 +45,20 @@ Setpoints/holds, velocity clamp and the falling ball are in the same file.
 
 ## Quick start
 
+One command starts everything (creates `.venv` on first run, waits for the OPC UA port, then starts the
+mock PLC and Godot; closing the Godot window or Ctrl+C stops all three; logs in `logs/`):
+
+```bash
+./run.sh                    # simulator + mock PLC (ball held at centre) + Godot
+./run.sh --pattern circle   # mock PLC drives the ball around a circle (center|circle|square)
+./run.sh --no-mock          # real PLC: simulator + Godot only, PLC connects to opc.tcp://<this-pc>:4840
+./run.sh --no-godot         # headless, e.g. over SSH
+./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64   # or GODOT=... ; otherwise godot, godot4,
+                                                          # ~/godot/Godot_v*, or the Flatpak is used
+```
+
+Or step by step:
+
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
