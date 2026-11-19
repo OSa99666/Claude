@@ -34,6 +34,8 @@ Scaling lives in `config/sim.toml` (`[scaling]`); the PLC must use the same rang
 | Distance setpoint X/Y + *Set distance* | pins the ball position while checked (`PDSPX/Y`, `RX12/RX22`) |
 | **Center ball** | ball to the centre, at rest, back on the table (`RXBL`) |
 
+Table dimensions (size, ball radius, wall height and thickness) are in `config/sim.toml` `[table]`;
+the wall thickness is purely visual, the physical wall is the table edge.
 Mouse: drag to orbit, wheel to zoom.  With **no OPC UA client connected the table levels itself**.
 
 ## Physics (`ballplate/physics.py`)

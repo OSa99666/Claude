@@ -32,6 +32,7 @@ var send_timer := 0.0
 var built_L := -1.0
 var built_R := -1.0
 var built_wh := -1.0
+var built_wt := -1.0
 var msg := {}
 var last_rx_ms := -100000
 
@@ -77,7 +78,7 @@ func _ready() -> void:
 	_build_panel(layer)
 	add_child(layer)
 
-	_build(2.0, 0.06, 0.12)
+	_build(2.0, 0.06, 0.12, 0.003)
 
 
 # ------------------------------------------------------------------ UI panel
@@ -206,7 +207,7 @@ func _box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	return mi
 
 
-func _build(L: float, R: float, wh: float) -> void:
+func _build(L: float, R: float, wh: float, t: float) -> void:
 	for c in table.get_children():
 		if c != ball:
 			c.queue_free()
@@ -214,7 +215,7 @@ func _build(L: float, R: float, wh: float) -> void:
 	built_L = L
 	built_R = R
 	built_wh = wh
-	var t := 0.03                      # wall thickness
+	built_wt = t                       # wall thickness (config: [table] wall_thickness_m)
 	var wc := Color(0.35, 0.37, 0.42)
 	table.add_child(_box(Vector3(L + 2 * t, 0.04, L + 2 * t), Vector3(0, -0.02, 0), Color(0.78, 0.74, 0.62)))
 	walls.append(_box(Vector3(t, wh, L + 2 * t), Vector3(L / 2 + t / 2, wh / 2, 0), wc))
@@ -270,8 +271,9 @@ func _process(delta: float) -> void:
 	var L := float(msg.get("L", 2.0))
 	var R := float(msg.get("R", 0.06))
 	var wh := float(msg.get("wh", 0.12))
-	if absf(L - built_L) > 1e-6 or absf(R - built_R) > 1e-6 or absf(wh - built_wh) > 1e-6:
-		_build(L, R, wh)
+	var wt := float(msg.get("wt", 0.003))
+	if absf(L - built_L) > 1e-6 or absf(R - built_R) > 1e-6 or absf(wh - built_wh) > 1e-6 or absf(wt - built_wt) > 1e-6:
+		_build(L, R, wh, wt)
 	var walls_on := bool(msg.get("walls", true))
 	for w in walls:
 		w.visible = walls_on

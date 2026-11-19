@@ -107,6 +107,7 @@ def test_actuator_rate_limit():
 def test_default_geometry_matches_real_table():
     p = Params()
     assert p.table_size == 2.0 and p.ball_radius == 0.06 and p.wall_height == 0.12
+    assert p.wall_thickness == 0.003
 
 
 def test_hold_velocity_forces_rolling_velocity():

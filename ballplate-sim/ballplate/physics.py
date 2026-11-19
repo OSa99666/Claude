@@ -43,6 +43,7 @@ class Params:
     ball_radius: float = 0.06     # m (12 cm diameter)
     ball_mass: float = 0.5        # kg (cancels out of the motion; kept for N, F)
     wall_height: float = 0.12     # m (visual only)
+    wall_thickness: float = 0.003 # m (visual only; the physical wall is the table edge)
     mu_s: float = 0.35            # ball/table static friction
     mu_k: float = 0.25            # ball/table kinetic friction
     c_rr: float = 0.002           # rolling resistance (decel = c_rr * g)

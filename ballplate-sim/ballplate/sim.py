@@ -28,6 +28,7 @@ def build_model(cfg) -> BallPlate:
     t, c = cfg["table"], cfg["contact"]
     p = Params(table_size=t["size_m"], ball_radius=t["ball_radius_m"],
                ball_mass=t["ball_mass_kg"], wall_height=t.get("wall_height_m", 0.12),
+               wall_thickness=t.get("wall_thickness_m", 0.003),
                tilt_max_deg=t["tilt_max_deg"], tilt_rate_deg_s=t["tilt_rate_deg_s"],
                tilt_tau=t["tilt_tau_s"], mu_s=c["mu_s"], mu_k=c["mu_k"], c_rr=c["c_rr"],
                e_wall=max(0.0, min(1.0, c["e_wall"])), walls_enabled=c["e_wall"] >= 0,
@@ -118,7 +119,7 @@ class Simulator:
         if not self.udp:
             return
         s, p = self.model.s, self.model.p
-        msg = {"t": round(self.t, 3), "L": p.table_size, "R": p.ball_radius, "wh": p.wall_height,
+        msg = {"t": round(self.t, 3), "L": p.table_size, "R": p.ball_radius, "wh": p.wall_height, "wt": p.wall_thickness,
                "walls": p.walls_enabled, "x": s.x, "y": s.y, "z": s.z, "off": s.off_table,
                "tx": s.tilt_x, "ty": s.tilt_y, "q": s.q, "slip": s.slipping,
                "plc": self.clients > 0, "clients": self.clients,

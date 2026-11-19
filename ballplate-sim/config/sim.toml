@@ -25,6 +25,7 @@ size_m          = 2.0     # square, +-1 m
 ball_radius_m   = 0.06    # 12 cm diameter
 ball_mass_kg    = 0.5
 wall_height_m   = 0.12
+wall_thickness_m = 0.003   # visual only: the physical wall is the table edge (+-size/2)
 tilt_max_deg    = 15.0
 tilt_rate_deg_s = 60.0
 tilt_tau_s      = 0.05
