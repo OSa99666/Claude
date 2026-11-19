@@ -78,6 +78,19 @@ With the real PLC: start the simulator, open TCP 4840 on the PC, then connect fr
 `config/sim.toml` to its address; Godot sends its UI values back to whichever address the state comes from.
 `python -m tools.browse_nodes opc.tcp://<pc>:4840` lists what the server exposes.
 
+**Checking the OPC UA update rate** (run it next to the PLC to see what the network delivers):
+
+```bash
+python -m tools.rate_check opc.tcp://<pc>:4840                    # subscription at 20 ms
+python -m tools.rate_check opc.tcp://<pc>:4840 --interval 1000    # what a 1 s default gives
+python -m tools.rate_check opc.tcp://<pc>:4840 --mode poll        # read loop, round-trip times
+```
+
+The simulator refreshes the words every 10 ms and the server delivers exactly the publishing interval a
+client asks for (10 ms -> 100/s, 20 ms -> 50/s, 1000 ms -> 1/s).  A subscription only reports *changes*, so
+keep the ball moving when measuring.  If the PLC sees a slower rate than `rate_check`, the PLC's connection
+settings (publishing/sampling/poll interval, task cycle) are the limit.
+
 ## Status
 
 * Verified here: all 23 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
