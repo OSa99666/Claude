@@ -93,7 +93,30 @@ async def run_poll(c, nodes, duration):
     print(f"  data changed in  : {changes} reads ({changes / duration:.1f}/s)  <- the simulator refreshes at 100/s")
 
 
+async def identify(url: str) -> bool:
+    """Ask the server who it is before opening a session; helps when the wrong address is used."""
+    probe = Client(url, timeout=5)
+    try:
+        eps = await probe.connect_and_get_server_endpoints()
+    except Exception as e:  # noqa: BLE001
+        print(f"cannot reach an OPC UA server at {url}: {e!r}")
+        print("  check: simulator running?  address/port right?  firewall (TCP 4840)?")
+        return False
+    srv = eps[0].Server
+    name = srv.ApplicationName.Text if srv.ApplicationName else "?"
+    print(f"server at {url} says: name='{name}'  uri='{srv.ApplicationUri}'")
+    for e in eps:
+        tokens = ",".join(t.TokenType.name for t in (e.UserIdentityTokens or []))
+        print(f"  endpoint: {e.SecurityMode.name:16} {e.SecurityPolicyUri.rsplit('#', 1)[-1]:16} login: {tokens}")
+    if "ballplate" not in (srv.ApplicationUri or "").lower() and "rolling" not in name.lower():
+        print("  !! this does not look like the rolling-table simulator (expected name 'Rolling table simulator').")
+        print("     Wrong host or port?  Another OPC UA server (e.g. the CODESYS runtime) may be using this port.")
+    return True
+
+
 async def main_async(a):
+    if not await identify(a.url):
+        return
     c = Client(a.url, timeout=5)
     if a.user:
         c.set_user(a.user)
@@ -125,6 +148,12 @@ def main():
         asyncio.run(main_async(a))
     except KeyboardInterrupt:
         pass
+    except Exception as e:  # noqa: BLE001
+        print(f"\nFAILED: {e!r}")
+        if "ServiceUnsupported" in repr(e) or "NamespaceUri" in repr(e) or "BadNodeId" in repr(e):
+            print("  The server answered but is not (or does not behave like) the rolling-table simulator.")
+            print("  Check the URL; try: python -m tools.browse_nodes <url>")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
