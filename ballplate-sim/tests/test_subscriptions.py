@@ -21,7 +21,7 @@ class H:
 
 async def scenario(caplog):
     cfg = config.load()
-    cfg["opcua"]["endpoint"] = EP
+    cfg["opcua"].update(endpoint=EP, publishing_interval_cap_ms=0)   # cap off: honour the client
     cfg["visual"].update(enabled=False, command_port=CMD_PORT)
     sim = Simulator(cfg)
     task = asyncio.create_task(sim.run())

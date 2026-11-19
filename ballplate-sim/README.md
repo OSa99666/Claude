@@ -109,7 +109,7 @@ equals the subscription's publishing interval, whatever sampling interval it req
 whatever its update rate is set to), let the server serve it faster:
 
 ```bash
-./run.sh --no-mock --publish-cap-ms 20      # or set publishing_interval_cap_ms = 20 in config/sim.toml
+./run.sh --no-mock --publish-cap-ms 20      # (the default in config/sim.toml is now 20; set 0 to give each client exactly what it asks for)
 ```
 
 The server then grants 20 ms instead of the requested interval (the log line says
