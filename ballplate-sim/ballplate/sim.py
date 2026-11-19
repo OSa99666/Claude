@@ -179,6 +179,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("-c", "--config", default=None)
     ap.add_argument("--endpoint", help="override opcua.endpoint, e.g. opc.tcp://0.0.0.0:4840")
+    ap.add_argument("--publish-cap-ms", type=float, default=None,
+                    help="cap every client's subscription publishing interval (ms), e.g. 20; 0 = off")
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
@@ -187,6 +189,8 @@ def main():
     cfg = cfgmod.load(a.config)
     if a.endpoint:
         cfg["opcua"]["endpoint"] = a.endpoint
+    if a.publish_cap_ms is not None:
+        cfg["opcua"]["publishing_interval_cap_ms"] = a.publish_cap_ms
     try:
         asyncio.run(Simulator(cfg).run())
     except KeyboardInterrupt:

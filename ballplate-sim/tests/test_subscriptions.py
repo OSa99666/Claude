@@ -77,3 +77,44 @@ def test_modify_subscription_is_applied_and_requests_are_logged(caplog):
     assert "CreateSubscription: client requested publishing interval 1000" in text
     assert "requested sampling interval(s) [200.0] ms" in text
     assert "ModifySubscription" in text and "requested publishing interval 50" in text
+
+
+async def capped_scenario():
+    cfg = config.load()
+    cfg["opcua"].update(endpoint="opc.tcp://127.0.0.1:48557", publishing_interval_cap_ms=20)
+    cfg["visual"].update(enabled=False, command_port=49873)
+    sim = Simulator(cfg)
+    task = asyncio.create_task(sim.run())
+    for _ in range(100):
+        try:
+            c = Client("opc.tcp://127.0.0.1:48557")
+            await c.connect()
+            break
+        except Exception:
+            await asyncio.sleep(0.2)
+    try:
+        idx = await c.get_namespace_index(cfg["opcua"]["namespace_uri"])
+        sim.model.reset(-0.9, 0.0)
+        sim.model.hold_vx = 0.3
+        h = H()
+        sub = await c.create_subscription(1000, h)       # PLC-style: asks for 1 s ...
+        await sub.subscribe_data_change(c.get_node(ua.NodeId("F_XG12", idx)), queuesize=1, sampling_interval=1000)
+        await asyncio.sleep(0.3)
+        h.n = 0
+        await asyncio.sleep(1.5)
+        return h.n / 1.5
+    finally:
+        await c.disconnect()
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+def test_publishing_interval_cap_serves_slow_clients_faster(caplog):
+    caplog.set_level(logging.INFO, logger="opcua.subs")
+    rate = asyncio.run(asyncio.wait_for(capped_scenario(), 60))
+    assert 40 <= rate <= 55, rate                         # 20 ms cap -> ~50/s instead of 1/s
+    assert "client requested publishing interval 1000 ms" in caplog.text
+    assert "granted 20 ms" in caplog.text and "publishing_interval_cap_ms in effect" in caplog.text

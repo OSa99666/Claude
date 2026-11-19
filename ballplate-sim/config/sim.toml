@@ -7,6 +7,10 @@
 [opcua]
 endpoint      = "opc.tcp://0.0.0.0:4840"
 namespace_uri = "urn:ballplate:simulation"
+# 0 = give each client exactly the publishing interval it asks for.  A value > 0 (e.g. 20) caps it:
+# a client that asks for 1000 ms is then served every 20 ms (keep-alive/lifetime are scaled so its
+# time-outs stay the same).  Use when the PLC's OPC UA client refuses to go below 1 s.
+publishing_interval_cap_ms = 0
 # Optional user/password.  Leave out for anonymous access (first tests).
 # username = "plc"
 # password = "change-me"

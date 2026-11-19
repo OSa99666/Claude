@@ -10,6 +10,12 @@
    update rate would otherwise stay at the default.  Here the new interval is applied by restarting
    the publish loop (monitored items are kept).
 
+3. Optional publishing-interval cap (``[opcua] publishing_interval_cap_ms``, 0 = off): a client that
+   asks for a slower interval (e.g. a PLC client that never goes below 1000 ms) is granted the cap
+   instead.  The spec allows the server to revise the interval; keep-alive and lifetime counts are
+   scaled up by the same factor so the subscription keeps its time-outs in seconds.  The client then
+   simply receives notifications more often.
+
 Data changes are pushed when the simulator writes a value, so the effective update rate equals the
 subscription's publishing interval, whatever sampling interval the client asks for.
 """
@@ -17,12 +23,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 
 from asyncua import ua
 from asyncua.common import utils
 
 log = logging.getLogger("opcua.subs")
 _applied = False
+_cap_ms = 0.0
 _tasks: set[asyncio.Task] = set()
 
 
@@ -51,11 +59,19 @@ def _patch() -> None:
     orig_items = S.create_monitored_items
 
     async def create_subscription(self, params, callback, session_id, request_callback=None):
+        asked = (params.RequestedPublishingInterval, params.RequestedMaxKeepAliveCount,
+                 params.RequestedLifetimeCount)
+        if _cap_ms > 0 and params.RequestedPublishingInterval > _cap_ms:
+            k = params.RequestedPublishingInterval / _cap_ms     # keep time-outs unchanged in seconds
+            params.RequestedPublishingInterval = _cap_ms
+            params.RequestedMaxKeepAliveCount = int(math.ceil(params.RequestedMaxKeepAliveCount * k))
+            params.RequestedLifetimeCount = int(math.ceil(params.RequestedLifetimeCount * k))
         res = await orig_create(self, params, callback, session_id, request_callback)
+        capped = " (publishing_interval_cap_ms in effect)" if res.RevisedPublishingInterval < asked[0] else ""
         log.info("CreateSubscription: client requested publishing interval %g ms (keep-alive %d, lifetime %d)"
-                 " -> granted %g ms, subscription id %d",
-                 params.RequestedPublishingInterval, params.RequestedMaxKeepAliveCount,
-                 params.RequestedLifetimeCount, res.RevisedPublishingInterval, res.SubscriptionId)
+                 " -> granted %g ms (keep-alive %d, lifetime %d)%s, subscription id %d",
+                 asked[0], asked[1], asked[2], res.RevisedPublishingInterval,
+                 res.RevisedMaxKeepAliveCount, res.RevisedLifetimeCount, capped, res.SubscriptionId)
         return res
 
     async def create_monitored_items(self, params):
@@ -74,12 +90,14 @@ def _patch() -> None:
         if sub is None:
             raise utils.ServiceError(ua.StatusCodes.BadSubscriptionIdInvalid)
         old = sub.data.RevisedPublishingInterval
-        req = float(params.RequestedPublishingInterval)
+        asked = req = float(params.RequestedPublishingInterval)
+        if _cap_ms > 0 and req > _cap_ms:
+            req = _cap_ms
         if req > 0 and abs(req - old) > 1e-9:
             sub.data.RevisedPublishingInterval = req
             _restart_publish_loop(sub)
         log.info("ModifySubscription id %d: client requested publishing interval %g ms (was %g ms) -> now %g ms",
-                 params.SubscriptionId, req, old, sub.data.RevisedPublishingInterval)
+                 params.SubscriptionId, asked, old, sub.data.RevisedPublishingInterval)
         result = ua.ModifySubscriptionResult()
         result.RevisedPublishingInterval = sub.data.RevisedPublishingInterval
         result.RevisedLifetimeCount = sub.data.RevisedLifetimeCount
@@ -91,8 +109,9 @@ def _patch() -> None:
     S.modify_subscription = modify_subscription
 
 
-def apply() -> None:
-    global _applied
+def apply(publishing_interval_cap_ms: float = 0.0) -> None:
+    global _applied, _cap_ms
+    _cap_ms = max(0.0, float(publishing_interval_cap_ms or 0.0))
     if _applied:
         return
     try:

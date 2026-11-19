@@ -49,12 +49,13 @@ class SimServer:
         o = cfg["opcua"]
         self.endpoint = o["endpoint"]
         self.uri = o["namespace_uri"]
+        self.cap_ms = float(o.get("publishing_interval_cap_ms", 0) or 0)
         self._auth = (o.get("username"), o.get("password")) if o.get("username") else None
         self.server: Server | None = None
         self.nodes: dict[str, object] = {}
 
     async def start(self):
-        subscription_tweaks.apply()
+        subscription_tweaks.apply(self.cap_ms)
         s = Server(user_manager=_Users(*self._auth)) if self._auth else Server()
         await s.init()
         s.set_endpoint(self.endpoint)

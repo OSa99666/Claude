@@ -103,6 +103,18 @@ monitored item, and what the server granted.  `ModifySubscription` requests are 
 ignores them).  Data changes are pushed when the simulator writes, so the update rate seen by a client
 equals the subscription's publishing interval, whatever sampling interval it requests.
 
+**If the PLC's client insists on a slow interval** (e.g. the CODESYS Data Source Manager asks for 1000 ms
+whatever its update rate is set to), let the server serve it faster:
+
+```bash
+./run.sh --no-mock --publish-cap-ms 20      # or set publishing_interval_cap_ms = 20 in config/sim.toml
+```
+
+The server then grants 20 ms instead of the requested interval (the log line says
+`publishing_interval_cap_ms in effect`) and scales keep-alive/lifetime so the client's time-outs do not
+change.  The client just receives notifications more often.  Whether the PLC applies them that often
+depends on the client; check the values in the PLC.
+
 ## Status
 
 * Verified here: all 23 tests (physics, scaling, closed loop with INT quantisation, and an asyncua

@@ -6,6 +6,7 @@
 #   ./run.sh --no-mock            real PLC: only simulator + Godot (PLC connects to opc.tcp://<this-pc>:4840)
 #   ./run.sh --no-godot           headless (e.g. over SSH): simulator + mock PLC only
 #   ./run.sh --godot /path/to/Godot_v4.3-stable_linux.x86_64
+#   ./run.sh --publish-cap-ms 20  serve OPC UA clients at least every 20 ms even if they ask for 1000 ms
 #
 # Environment: VENV=<dir> use another virtualenv (default ./.venv, created if missing)
 #              GODOT=<cmd> Godot executable
@@ -14,14 +15,15 @@
 set -u
 cd "$(dirname "$(readlink -f "$0")")"
 
-PATTERN=center; MOCK=1; USE_GODOT=1; GODOT_BIN="${GODOT:-}"
+PATTERN=center; MOCK=1; USE_GODOT=1; GODOT_BIN="${GODOT:-}"; SIM_ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --pattern)  PATTERN="${2:?--pattern needs center|circle|square}"; shift 2 ;;
         --no-mock)  MOCK=0; shift ;;
         --no-godot) USE_GODOT=0; shift ;;
         --godot)    GODOT_BIN="${2:?--godot needs a path}"; shift 2 ;;
-        -h|--help)  sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --publish-cap-ms) SIM_ARGS+=(--publish-cap-ms "${2:?--publish-cap-ms needs a number}"); shift 2 ;;
+        -h|--help)  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1 (try --help)"; exit 2 ;;
     esac
 done
@@ -61,7 +63,7 @@ trap cleanup EXIT INT TERM
 
 # ----------------------------------------------------------------- simulator
 echo ">> starting simulator (log: logs/sim.log)"
-"$PY" -m ballplate.sim > logs/sim.log 2>&1 &
+"$PY" -m ballplate.sim "${SIM_ARGS[@]}" > logs/sim.log 2>&1 &
 SIM=$!; PIDS+=("$SIM")
 
 echo -n ">> waiting for OPC UA server on port $PORT "
