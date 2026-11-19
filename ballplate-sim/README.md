@@ -91,6 +91,18 @@ client asks for (10 ms -> 100/s, 20 ms -> 50/s, 1000 ms -> 1/s).  A subscription
 keep the ball moving when measuring.  If the PLC sees a slower rate than `rate_check`, the PLC's connection
 settings (publishing/sampling/poll interval, task cycle) are the limit.
 
+**What does the PLC really ask for?**  The simulator logs every subscription request of every client
+(`logs/sim.log`, lines containing `CreateSubscription`, `ModifySubscription`, `CreateMonitoredItems`):
+
+```bash
+grep -E "Subscription|MonitoredItems" logs/sim.log
+```
+
+The log shows the publishing interval the client asked for, the sampling interval and queue size of each
+monitored item, and what the server granted.  `ModifySubscription` requests are honoured (stock asyncua
+ignores them).  Data changes are pushed when the simulator writes, so the update rate seen by a client
+equals the subscription's publishing interval, whatever sampling interval it requests.
+
 ## Status
 
 * Verified here: all 23 tests (physics, scaling, closed loop with INT quantisation, and an asyncua

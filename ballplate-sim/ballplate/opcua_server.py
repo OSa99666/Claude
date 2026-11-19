@@ -17,6 +17,8 @@ import logging
 
 from asyncua import Server, ua
 
+from . import subscription_tweaks
+
 log = logging.getLogger("opcua")
 
 FOLDER = "RollingTable"
@@ -52,6 +54,7 @@ class SimServer:
         self.nodes: dict[str, object] = {}
 
     async def start(self):
+        subscription_tweaks.apply()
         s = Server(user_manager=_Users(*self._auth)) if self._auth else Server()
         await s.init()
         s.set_endpoint(self.endpoint)
