@@ -49,6 +49,8 @@ var target := Vector3(2.4, 0.0, 0.8)
 
 const TYPE_COLOURS := [Color(0.5, 0.5, 0.5), Color(0.2, 0.35, 1.0), Color(0.2, 0.8, 0.3),
 		Color(0.9, 0.2, 0.2), Color(0.95, 0.85, 0.2), Color(0.85, 0.85, 0.85)]
+# T_XCQ identification word (ARGB item colour) -> item type 1..4; type 5 (0xFFD0D0D0) is not detected
+const DETECT_TYPES := {0xFF000065: 1, 0xFF006500: 2, 0xFF650000: 3, 0xFF656500: 4}
 const BELT_W := 0.3
 const ITEM_H := 0.16
 
@@ -459,7 +461,9 @@ func _process(delta: float) -> void:
 	for k in 4:
 		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1))
 	var xcq := int(io.get("T_XCQ", 0))
-	_lamp(det_lamp, xcq != 0, Color(0.3, 0.7, 1.0))
+	# gate lamp: colour of the detected item (types 1-4); off for no item and for untreated items (type 5)
+	var det_type: int = DETECT_TYPES.get(xcq, 0)
+	_lamp(det_lamp, det_type > 0, TYPE_COLOURS[det_type])
 	var st: Array = msg["store"]
 	for n in 5:
 		var sm := store_boxes[n].material_override as StandardMaterial3D
