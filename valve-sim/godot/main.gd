@@ -40,6 +40,13 @@ var send_timer := 0.0
 var msg := {}
 var last_rx_ms := -100000
 
+# dimmed palette shared with the transport simulation (same ARGB item colours / metal)
+const METAL := Color(0.6, 0.63, 0.68)
+const WATER := Color8(0x00, 0x00, 0x65)         # dark blue
+const DISC := Color8(0x65, 0x65, 0x00)          # dark yellow
+const LEVER := Color8(0x65, 0x00, 0x00)         # dark red
+const PARTICLE := Color(0.55, 0.65, 0.85)
+
 var yaw := 0.6
 var pitch := 0.35
 var dist := 4.2
@@ -109,7 +116,7 @@ func _cyl(r: float, h: float, pos: Vector3, mat: Material, rot := Vector3.ZERO) 
 
 
 func _build_valve() -> void:
-	var steel := _mat(Color(0.62, 0.65, 0.7), 1.0, 0.6)
+	var steel := _mat(METAL, 1.0, 0.5)
 	var glass := _mat(Color(0.75, 0.85, 0.95), 0.25)
 	# pipe along X (cylinders are along Y, rotate 90 deg about Z); left, right, transparent middle
 	_cyl(0.30, 1.6, Vector3(-1.4, 0, 0), steel, Vector3(0, 0, 90))
@@ -118,12 +125,12 @@ func _build_valve() -> void:
 	for x in [-0.6, 0.6]:
 		_cyl(0.38, 0.08, Vector3(x, 0, 0), steel, Vector3(0, 0, 90))   # flanges
 	# upstream water (always) and downstream water (follows the opening)
-	_cyl(0.26, 1.6, Vector3(-1.4, 0, 0), _mat(Color(0.2, 0.5, 0.95)), Vector3(0, 0, 90))
+	_cyl(0.26, 1.6, Vector3(-1.4, 0, 0), _mat(WATER), Vector3(0, 0, 90))
 	down_water.mesh = CylinderMesh.new()
 	(down_water.mesh as CylinderMesh).top_radius = 0.26
 	(down_water.mesh as CylinderMesh).bottom_radius = 0.26
 	(down_water.mesh as CylinderMesh).height = 1.6
-	down_water_mat.albedo_color = Color(0.2, 0.5, 0.95)
+	down_water_mat.albedo_color = WATER
 	down_water.material_override = down_water_mat
 	down_water.position = Vector3(1.4, 0, 0)
 	down_water.rotation_degrees = Vector3(0, 0, 90)
@@ -147,7 +154,7 @@ func _build_valve() -> void:
 		part_z.append(r * cos(a))
 	var fi := MultiMeshInstance3D.new()
 	fi.multimesh = flow_mm
-	fi.material_override = _mat(Color(0.75, 0.9, 1.0))
+	fi.material_override = _mat(PARTICLE)
 	add_child(fi)
 	# stem + actuator housing
 	_cyl(0.05, 0.9, Vector3(0, 0.55, 0), steel)
@@ -159,7 +166,7 @@ func _build_valve() -> void:
 	dm.height = 0.03
 	var dmi := MeshInstance3D.new()
 	dmi.mesh = dm
-	dmi.material_override = _mat(Color(0.95, 0.75, 0.2), 1.0, 0.4)
+	dmi.material_override = _mat(DISC, 1.0, 0.4)
 	dmi.rotation_degrees = Vector3(0, 0, 90)   # disc plane perpendicular to the flow (X) = closed
 	disc.add_child(dmi)
 	add_child(disc)
@@ -170,7 +177,7 @@ func _build_valve() -> void:
 	var bm := BoxMesh.new()
 	bm.size = Vector3(0.08, 0.05, 0.7)
 	bar.mesh = bm
-	bar.material_override = _mat(Color(0.9, 0.2, 0.2))
+	bar.material_override = _mat(LEVER)
 	lever.add_child(bar)
 
 
@@ -306,7 +313,7 @@ func _process(delta: float) -> void:
 	# disc: across the pipe at Low (0 deg), turned 90 deg along the pipe at High
 	disc.rotation_degrees = Vector3(0, 90.0 * pos, 0)
 	lever.rotation_degrees = Vector3(0, 90.0 * pos, 0)   # same direction as the disc: bar parallel to the disc plane
-	down_water_mat.albedo_color = Color(0.2, 0.5, 0.95, 1.0).lerp(Color(0.25, 0.27, 0.3), 1.0 - clampf((pos - 0.1) / 0.9, 0.0, 1.0))
+	down_water_mat.albedo_color = WATER.lerp(Color(0.25, 0.27, 0.3), 1.0 - clampf((pos - 0.1) / 0.9, 0.0, 1.0))
 
 	# flow: ~ opening of the butterfly (sin of the disc angle), particles stop when closed
 	var flow := sin(pos * PI / 2.0)
