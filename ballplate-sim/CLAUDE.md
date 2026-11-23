@@ -2,6 +2,13 @@
 
 Saved from the working session so a later session can continue without the chat history.
 
+## Sibling simulations
+Standalone simulations in the same repo, each with its own launcher, ports and CLAUDE.md: `../valve-sim`
+(bistable valve, OPC UA 4841) and `../transport-sim` (conveyor sorting, OPC UA 4842).  The table uses 4840.
+They copy `subscription_tweaks.py` (and the valve/two-state model) instead of sharing code; keep copies in sync.
+Decided with the user: the PLC control is external (no ST compiling here), "poke" is covered by the forced
+velocity/position setpoints, tuning plots are done in CODESYS, OPC UA security is on hold (lab access via VPN).
+
 ## Goal
 A PLC (CODESYS on a Raspberry Pi) controls a ball rolling on a tilting 2 m x 2 m table.  A Linux PC
 simulates the physics (Python) and shows/controls it in Godot.  Replaces an older simulation that ran

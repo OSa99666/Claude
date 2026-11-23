@@ -11,5 +11,10 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
 - `transportsim/transport.py`: model.  Deliberate deviation: ejector barrier = queue (library's flag logic overlaps items).
 - `transportsim/mock_plc.py`: sorter tracking item types from the detector queue; works at the default speeds
   (T1 raw 24000); dense traffic (items stacked 60 ticks apart) can confuse it - it is only a mock.
-- Godot scene (`godot/main.gd`) was written without Godot available: untested, needs user feedback.
+- Godot scene (`godot/main.gd`): confirmed working by the user (written without Godot in the dev container, so the
+  user checks visual changes).  Decisions made with the user: motors are cylinders (T1 motor beside conveyor 1);
+  item-in-front sensors hang above the ejection positions; the gate detector lamp takes the item colour (off for
+  untreated type 5, which has no detector bit and runs to store 1 - intended); all detectors/motors show the metal
+  colour (`METAL`) when off; ejector rod and housing are 0.5 m so the piston stays inside when extended.
+- Not verified: the real PLC link / CODESYS program for this simulation; `ejector_travel_to_end` assumed true.
 - Tests: `python -m pytest -q` in `transport-sim` (8 pass).  Never put passwords/tokens in the repo.
