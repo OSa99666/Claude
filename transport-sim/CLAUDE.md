@@ -23,3 +23,4 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
   belt ends (the sim sends `store_in` arrival counters + `colours`; Godot animates the fall), item/lamp colours come from the
   ARGB words in the state (`colours`, `T_XCQ`).  Written WITHOUT being run in Godot (download of a Godot binary into the dev
   container was blocked), so the user must check it.
+- Naming convention (user): OPC UA folder and server name follow the project (`Ballplate`/`Ballplate simulator`, `Valve`/`Valve simulator`, `Transport`/`Transport simulator`).

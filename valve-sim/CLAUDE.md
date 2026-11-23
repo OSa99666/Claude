@@ -21,3 +21,4 @@ The third one (conveyor sorting) is `../transport-sim`.
 - Colours (latest, per user): dimmed palette shared with transport-sim - water dark blue 0x000065, disc dark yellow
   0x656500, lever dark red 0x650000, metal (0.6,0.63,0.68), particles soft light blue.  Constants at the top of
   `godot/main.gd`.  Not run in Godot after this change (user checks visuals).
+- Naming convention (user): OPC UA folder and server name follow the project (`Ballplate`/`Ballplate simulator`, `Valve`/`Valve simulator`, `Transport`/`Transport simulator`).
