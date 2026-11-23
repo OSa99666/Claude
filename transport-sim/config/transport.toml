@@ -1,0 +1,48 @@
+# Transport / sorting simulator configuration
+#
+# Main conveyor T1 carries items past a detector and four ejectors; each ejector pushes its item
+# onto a side conveyor (T2..T5) that ends in a store.  Items that reach the end of T1 go to store 1.
+# The simulator is the OPC UA *server*; the PLC connects as a client (CODESYS Data Source Manager).
+# Only the PLC IO is exposed; everything else (item feed, forces, timing) is set in the Godot UI.
+# Defaults differ from the other simulations (table 4840, valve 4841) so they can run side by side.
+
+[opcua]
+endpoint      = "opc.tcp://0.0.0.0:4842"
+namespace_uri = "urn:transportsim:simulation"
+publishing_interval_cap_ms = 20      # serves PLC clients that insist on 1000 ms faster; 0 = off
+# username = "plc"
+# password = "change-me"
+
+[sim]
+cycle_ms = 10
+random_seed = 0                      # 0 = different item sequence each run
+
+# Defaults of the PLC library's configuration structure tTransportSimulatorPef
+[pef]
+anim_period_min_ms = [15, 15, 15, 15, 15]   # ms per animation tick at full speed (YR = 32767)
+anim_period_max_ms = [80, 80, 80, 80, 80]   # ms per animation tick at minimum speed (YR = 0)
+animation_ticks    = 1       # ticks added per animation tick (1..10)
+ticks_per_item     = 60      # item size in ticks
+item_spacing_ticks = 30      # extra gap needed before the next item may enter T1
+motor_start_delay_ms = 100
+motor_stop_delay_ms  = 0
+ejector_extend_ms    = 200
+ejector_retract_ms   = 200
+ejector_delay_from_high_ms = 1000   # wait before retracting
+ejector_delay_from_low_ms  = 100    # wait before extending
+ejector_travel_to_end = true        # a started stroke is completed even if the command is removed
+
+# Layout in item slots (slot n starts at (n-1)*ticks_per_item; positions refer to the item's centre)
+[layout]
+t1_offload_slot = 19      # item leaves T1 into store 1 after 19 slots
+t1_max_items    = 21
+side_slots      = 5       # T2..T5 length in slots
+detector_slot   = 2
+ejector_slots   = [7, 10, 13, 16]
+
+[visual]
+host         = "127.0.0.1"   # where Godot listens for state (UDP)
+port         = 9874
+command_port = 9875          # where the simulator listens for Godot's UI commands
+enabled      = true
+tick_m       = 0.0041667     # metres per tick for the 3D view (60 ticks = 0.25 m item)

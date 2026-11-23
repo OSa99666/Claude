@@ -32,7 +32,7 @@ Reversing in mid-travel has no delay.  *Travel to end*: a started stroke complet
 removed.  With no OPC UA client connected, commands are ignored (the valve stays where it is).
 
 All parameters are in the Godot panel (defaults in `config/valve.toml`): transit times, action delays,
-travel-to-end, **safeguard High/Low** (`FSH`/`FSL`: blocks leaving that end position), **force feedbacks**
+travel-to-end, **safeguard High/Low** (`FSH`/`FSL`: forces the valve to that state, commands ignored; Low wins), **force feedbacks**
 true/false (`FH`/`FL`, for fault injection; false wins) and *Set to Low / Set to High* buttons.
 
 ## Quick start
@@ -43,7 +43,7 @@ true/false (`FH`/`FL`, for fault injection; false wins) and *Set to Low / Set to
 ./run.sh --no-godot      # headless
 ./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
-pytest                                  # 7 tests incl. a real OPC UA round trip
+pytest                                  # 9 tests incl. a real OPC UA round trip
 ```
 
 Connecting CODESYS: same procedure as for the rolling table (`../ballplate-sim/codesys/README.md`), with
@@ -56,5 +56,5 @@ a client that insists on 1000 ms faster.
   force feedbacks, UI buttons), headless `run.sh` with the mock PLC.
 * **Not verified:** the Godot scene (no Godot in the development container) and the real PLC link.
 * Assumptions to check against `fbEucTwoStatesAni` (not in the supplied XML): behaviour with both commands,
-  the exact meaning of the safeguard inputs, the forced-feedback semantics.  The `YG` position output of the
+  the forced-feedback precedence, the forced-feedback semantics.  The `YG` position output of the
   library block is not an OPC UA variable (only the four Bools are); Godot shows the position.

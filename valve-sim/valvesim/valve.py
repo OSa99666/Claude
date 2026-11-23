@@ -15,8 +15,9 @@ Behaviour
 * Transit time: ``t_to_high`` / ``t_to_low`` seconds for the full stroke, linear.
 * travel_to_end: a started travel is completed even if the command goes away (here the memory
   means the same; with travel_to_end=False the valve stops when the command is removed).
-* Safeguards (interpretation): ``safeguard_high`` blocks the valve from leaving High,
-  ``safeguard_low`` blocks it from leaving Low.
+* Safeguards: ``safeguard_high`` / ``safeguard_low`` force the valve to that state regardless of the
+  commands (the transport library uses them as "force extend" / "force stop"); Low wins if both.
+  The stroke still takes its action delay and transit time.
 * Force feedbacks: ``force_true`` makes both feedbacks true, ``force_false`` both false (wins).
 """
 from __future__ import annotations
@@ -43,6 +44,7 @@ class Valve:
         self.pos = 1.0 if high else 0.0
         self.want: int | None = None      # remembered command: 1 = High, 0 = Low
         self.delay = 0.0                  # time the current command has been waiting
+        self.left_low = False             # True for the one step in which the valve left Low
 
     # -- direct control from the UI ------------------------------------------------
     def set_position(self, high: bool):
@@ -70,6 +72,17 @@ class Valve:
     # -- time step -------------------------------------------------------------------
     def step(self, dt: float, cmd_high: bool, cmd_low: bool):
         p = self.p
+        self.left_low = False
+        before = self.pos
+        self._step(dt, cmd_high, cmd_low)
+        self.left_low = before <= 0.0 < self.pos      # started to move away from Low
+
+    def _step(self, dt: float, cmd_high: bool, cmd_low: bool):
+        p = self.p
+        if p.safeguard_low:
+            cmd_high, cmd_low = False, True
+        elif p.safeguard_high:
+            cmd_high, cmd_low = True, False
         if cmd_high and not cmd_low:
             if self.want != 1:
                 self.delay = 0.0
@@ -87,9 +100,6 @@ class Valve:
             return
         # leaving an end position
         if self.at_low or self.at_high:
-            if (self.at_low and p.safeguard_low) or (self.at_high and p.safeguard_high):
-                self.delay = 0.0
-                return
             wait = p.ad_from_low if self.at_low else p.ad_from_high
             self.delay += dt
             if self.delay < wait:

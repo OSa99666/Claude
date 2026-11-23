@@ -12,4 +12,5 @@ A third one (complex: sorting items off a conveyor) is planned; the user will su
 - `valvesim/subscription_tweaks.py` is a COPY of the table's (simulations stay standalone); keep in sync if fixed.
 - Godot scene (`godot/main.gd`) was written without Godot available: untested.  Needs user feedback.
 - Original user IO note: V_XGH/V_XGL were both written "%I20.0" and V_YH/V_YL "%Q20.0" (probably 20.0/20.1).
-- Tests: `python -m pytest -q` in `valve-sim` (7 pass).  Never put passwords/tokens in the repo.
+- Tests: `python -m pytest -q` in `valve-sim` (9 pass).  Never put passwords/tokens in the repo.
+- Safeguard FSH/FSL = FORCE to that state (confirmed by how the transport library uses them: FSH21 'Force extend', FSL11 'Force stop').

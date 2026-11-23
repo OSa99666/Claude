@@ -194,7 +194,7 @@ func _build_panel(layer: CanvasLayer) -> void:
 	_spin(box, "Leaving Low  (PADFL)", 0.0, 30.0, 0.1, "ad_from_low")
 	_spin(box, "Leaving High  (PADFH)", 0.0, 30.0, 0.1, "ad_from_high")
 	_check(box, "Travel to end (stroke completes if command removed)", "travel_to_end")
-	_heading(box, "Safeguarding (blocks leaving the end position)")
+	_heading(box, "Safeguarding (forces that state, ignores commands)")
 	_check(box, "Safeguard High  (FSH)", "safeguard_high")
 	_check(box, "Safeguard Low  (FSL)", "safeguard_low")
 	_heading(box, "Force feedbacks (fault injection)")

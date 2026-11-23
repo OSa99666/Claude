@@ -53,13 +53,33 @@ def test_conflict_keeps_previous_command():
     assert v.at_high
 
 
-def test_safeguard_and_force():
-    v = Valve(ValveParams(ad_from_low=0.0, safeguard_low=True))
+def test_safeguard_forces_state():
+    v = Valve(ValveParams(t_to_high=1.0, t_to_low=1.0, ad_from_low=0.0, ad_from_high=0.0, safeguard_low=True))
     run(v, 2.0, h=True)
-    assert v.at_low                             # blocked from leaving Low
+    assert v.at_low                             # command High ignored: forced Low
     v.p.safeguard_low = False
-    run(v, 4.0, h=True)
+    run(v, 2.0, h=True)
     assert v.at_high
+    v.p.safeguard_low = True
+    run(v, 2.0, h=True)                         # forced back to Low although High is commanded
+    assert v.at_low
+    v.p.safeguard_low = False
+    v.p.safeguard_high = True
+    run(v, 2.0, l=True)
+    assert v.at_high                            # forced High although Low is commanded
+
+
+def test_left_low_pulse():
+    v = Valve(ValveParams(ad_from_low=0.0, t_to_high=1.0))
+    pulses = 0
+    for _ in range(200):
+        v.step(0.01, True, False)
+        pulses += v.left_low
+    assert pulses == 1
+
+
+def test_force_feedbacks():
+    v = Valve()
     v.p.force_false = True
     assert v.feedbacks() == (False, False)
     v.p.force_true = True
