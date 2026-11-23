@@ -50,12 +50,15 @@ inside the PLC (`fbTiltingTable`/`fbTiltingAxis`, point-mass per axis, PLCopen X
 ## Status
 - 25 tests pass (physics, scaling, closed loop with INT quantisation, real OPC UA round trips,
   subscription modify/cap).  Godot UI and the OPC UA link to the real Pi were confirmed working by the user.
-- Not verified: the CODESYS ST example (`codesys/*.st`) has not been compiled.
+- Not verified: the CODESYS ST example (`codesys/*.st`) has not been compiled (reference only; control is external).
 
 ## Possible next steps
-- Compile/try the ST controller on the Pi; tune against the real update rate.
-- Godot: "poke the ball" disturbance, live tuning plots.
-- Optional OPC UA security (user/password in `config/sim.toml`, certificates).
+Project is feature-complete for now.  Decided with the user (latest session) NOT to do:
+- ST controller compile/tuning: the PLC control is external and maintained by the user.
+- Godot "poke the ball": covered by the forced velocity/position setpoints.
+- Live tuning plots: done in CODESYS.
+- OPC UA security: on hold; lab access is via VPN.
+Open ideas only if the user asks: tests/logging for client disconnect/reconnect over the VPN.
 
 ## Working notes for a future session
 - Develop on branch `claude/optimistic-ramanujan-0bcprr`; push there.  Never put passwords/tokens in the repo.
