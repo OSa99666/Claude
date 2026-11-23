@@ -59,7 +59,7 @@ class SimServer:
         s = Server(user_manager=_Users(*self._auth)) if self._auth else Server()
         await s.init()
         s.set_endpoint(self.endpoint)
-        s.set_server_name("Rolling table simulator")
+        s.set_server_name("Ballplate simulator")
         idx = await s.register_namespace(self.uri)
         folder = await s.nodes.objects.add_folder(idx, FOLDER)
         for name, desc in {**PLC_TO_SIM, **SIM_TO_PLC}.items():

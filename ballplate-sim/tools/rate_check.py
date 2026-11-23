@@ -108,8 +108,8 @@ async def identify(url: str) -> bool:
     for e in eps:
         tokens = ",".join(t.TokenType.name for t in (e.UserIdentityTokens or []))
         print(f"  endpoint: {e.SecurityMode.name:16} {e.SecurityPolicyUri.rsplit('#', 1)[-1]:16} login: {tokens}")
-    if "ballplate" not in (srv.ApplicationUri or "").lower() and "rolling" not in name.lower():
-        print("  !! this does not look like the rolling-table simulator (expected name 'Rolling table simulator').")
+    if "ballplate" not in (srv.ApplicationUri or "").lower() and "ballplate" not in name.lower():
+        print("  !! this does not look like the ballplate simulator (expected name 'Ballplate simulator').")
         print("     Wrong host or port?  Another OPC UA server (e.g. the CODESYS runtime) may be using this port.")
     return True
 
