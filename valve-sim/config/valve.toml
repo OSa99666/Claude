@@ -1,0 +1,30 @@
+# Valve simulator configuration (bistable valve, double solenoid)
+#
+# The simulator is the OPC UA *server*; the PLC connects as a client (CODESYS Data Source Manager).
+# Only the four Bool IOs are exposed; all valve parameters are set in the Godot UI.
+# Default ports differ from the rolling-table simulator so both can run on one PC.
+
+[opcua]
+endpoint      = "opc.tcp://0.0.0.0:4841"
+namespace_uri = "urn:valvesim:simulation"
+publishing_interval_cap_ms = 20      # see rolling-table README: serves slow PLC clients faster; 0 = off
+# username = "plc"
+# password = "change-me"
+
+[sim]
+cycle_ms = 10
+
+# Defaults for values that can be changed live in the Godot UI (names as in fbValveSimulator)
+[valve]
+transit_to_high_s = 3.0     # PTDTH  full travel low -> high
+transit_to_low_s  = 3.0     # PTDTL  full travel high -> low
+action_delay_from_low_s  = 0.5   # PADFL  delay after the command before the valve leaves Low
+action_delay_from_high_s = 0.5   # PADFH  delay after the command before the valve leaves High
+travel_to_end = true        # a started travel is completed even if the command is removed
+start_high    = false       # initial position (false = Low / closed)
+
+[visual]
+host         = "127.0.0.1"   # where Godot listens for state (UDP)
+port         = 9872
+command_port = 9873          # where the simulator listens for Godot's UI commands
+enabled      = true
