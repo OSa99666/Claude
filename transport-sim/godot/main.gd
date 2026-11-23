@@ -528,7 +528,7 @@ func _process(delta: float) -> void:
 	var io: Dictionary = msg["io"]
 	var run: Array = msg["run"]
 	for b in 5:
-		_lamp(motor_lamps[b], bool(run[b]), Color(0.2, 1.0, 0.3), METAL)
+		_lamp(motor_lamps[b], bool(run[b]), _tc(2), METAL)     # same green as the type-2 items
 	for k in 4:
 		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1), METAL)
 	var xcq := int(io.get("T_XCQ", 0))
