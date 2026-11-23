@@ -64,7 +64,7 @@ Or step by step:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-pytest                                    # 23 tests incl. a real OPC UA round trip
+pytest                                    # 25 tests incl. a real OPC UA round trip
 ```
 
 Without a PLC (a mock client plays the PLC):
@@ -119,10 +119,12 @@ depends on the client; check the values in the PLC.
 
 ## Status
 
-* Verified here: all 23 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
+* Verified here: all 25 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
   client talking to the simulator: Int16 variables, tilt → ball motion, hold velocity/position, centring,
   walls removed → ball off table → outputs 0).
-* **Not verified:** the new Godot UI (not run here), the CODESYS ST example (not compiled), and the
-  connection from the real Pi / Data Source Manager.
+* **Confirmed by the user on real hardware:** the Godot UI, and the OPC UA link to the Raspberry Pi /
+  CODESYS Data Source Manager at 50 Hz (`publishing_interval_cap_ms = 20`).
+* **Not verified:** the CODESYS ST example (`codesys/*.st`) has not been compiled; the real PLC
+  controller is maintained externally.
 * Decisions to check: acceleration range ±9.81 m/s² (old model used 0..g); the velocity range defaults to
   ±0.4 m/s as in `prgSimulation`, but the ball is only clamped to it if you tick the box.
