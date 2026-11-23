@@ -18,3 +18,6 @@ The third one (conveyor sorting) is `../transport-sim`.
 - Safeguard FSH/FSL = FORCE to that state (confirmed by how the transport library uses them: FSH21 'Force extend', FSL11 'Force stop').
 - Not verified: the CODESYS side / real PLC link for this simulation; `fbEucTwoStatesAni` precedence of force-true vs force-false is assumed (false wins).
 - The Valve class (`valvesim/valve.py`) is copied to `../transport-sim/transportsim/twostate.py`; keep both in sync.
+- Colours (latest, per user): dimmed palette shared with transport-sim - water dark blue 0x000065, disc dark yellow
+  0x656500, lever dark red 0x650000, metal (0.6,0.63,0.68), particles soft light blue.  Constants at the top of
+  `godot/main.gd`.  Not run in Godot after this change (user checks visuals).

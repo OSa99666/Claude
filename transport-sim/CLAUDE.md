@@ -18,6 +18,7 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
   colour (`METAL`) when off; ejector rod and housing are 0.5 m so the piston stays inside when extended.
 - Not verified: the real PLC link / CODESYS program for this simulation; `ejector_travel_to_end` assumed true.
 - Tests: `python -m pytest -q` in `transport-sim` (8 pass).  Never put passwords/tokens in the repo.
+- Motors: running colour = the type-2 item green (`_tc(2)`), metal when stopped.
 - View (latest): hopper + ramp at the T1 start (visual-only mapping of the first item length), items tip into open bins at the
   belt ends (the sim sends `store_in` arrival counters + `colours`; Godot animates the fall), item/lamp colours come from the
   ARGB words in the state (`colours`, `T_XCQ`).  Written WITHOUT being run in Godot (download of a Godot binary into the dev
