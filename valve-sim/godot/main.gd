@@ -22,6 +22,14 @@ var lever := Node3D.new()
 var down_water := MeshInstance3D.new()
 var down_water_mat := StandardMaterial3D.new()
 var cam := Camera3D.new()
+# animated fluid: small spheres drifting along the pipe, speed follows the valve opening
+const N_PART := 90
+const PIPE_HALF := 2.2
+var flow_mm := MultiMesh.new()
+var part_x := PackedFloat32Array()
+var part_y := PackedFloat32Array()
+var part_z := PackedFloat32Array()
+
 var hud := Label.new()
 var panel := PanelContainer.new()
 var controls := {}
@@ -120,6 +128,27 @@ func _build_valve() -> void:
 	down_water.position = Vector3(1.4, 0, 0)
 	down_water.rotation_degrees = Vector3(0, 0, 90)
 	add_child(down_water)
+	# flow particles
+	flow_mm.transform_format = MultiMesh.TRANSFORM_3D
+	var sm := SphereMesh.new()
+	sm.radius = 0.035
+	sm.height = 0.07
+	sm.radial_segments = 8
+	sm.rings = 4
+	flow_mm.mesh = sm
+	flow_mm.instance_count = N_PART
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in N_PART:
+		part_x.append(-PIPE_HALF + 2.0 * PIPE_HALF * float(i) / N_PART)
+		var r := 0.2 * sqrt(rng.randf())
+		var a := rng.randf() * TAU
+		part_y.append(r * sin(a))
+		part_z.append(r * cos(a))
+	var fi := MultiMeshInstance3D.new()
+	fi.multimesh = flow_mm
+	fi.material_override = _mat(Color(0.75, 0.9, 1.0))
+	add_child(fi)
 	# stem + actuator housing
 	_cyl(0.05, 0.9, Vector3(0, 0.55, 0), steel)
 	_cyl(0.16, 0.3, Vector3(0, 0.95, 0), _mat(Color(0.25, 0.3, 0.4), 1.0, 0.3))
@@ -278,6 +307,16 @@ func _process(delta: float) -> void:
 	disc.rotation_degrees = Vector3(0, 90.0 * pos, 0)
 	lever.rotation_degrees = Vector3(0, 90.0 * pos, 0)   # same direction as the disc: bar parallel to the disc plane
 	down_water_mat.albedo_color = Color(0.2, 0.5, 0.95, 1.0).lerp(Color(0.25, 0.27, 0.3), 1.0 - clampf((pos - 0.1) / 0.9, 0.0, 1.0))
+
+	# flow: ~ opening of the butterfly (sin of the disc angle), particles stop when closed
+	var flow := sin(pos * PI / 2.0)
+	for i in N_PART:
+		part_x[i] += flow * 1.6 * delta
+		if part_x[i] > PIPE_HALF:
+			part_x[i] -= 2.0 * PIPE_HALF
+		# downstream of the disc only while there is flow; no fluid left behind a closed valve
+		var vis := 1.0 if (part_x[i] < 0.0 or flow > 0.03) else 0.0
+		flow_mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3.ONE * vis), Vector3(part_x[i], part_y[i], part_z[i])))
 
 	var xgh := bool(msg["xgh"])
 	var xgl := bool(msg["xgl"])
