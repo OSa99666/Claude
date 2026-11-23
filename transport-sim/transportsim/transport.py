@@ -85,6 +85,7 @@ class Transport:
         self.t1: list[Item] = []
         self.side: list[list[Item]] = [[] for _ in range(4)]       # side[k] = conveyor T(k+2), newest first
         self.store: list[int] = [0] * 5                             # item id in store n (0 = empty)
+        self.store_in: list[int] = [0] * 5                          # items that have arrived in store n (for the view)
         self.motors = [Valve() for _ in range(5)]
         self.ejectors = [Valve() for _ in range(4)]
         self.cmd = dict(yh=[False] * 5, yr=[0] * 5, ej_yh=[False] * 4, ej_yl=[False] * 4)
@@ -169,6 +170,10 @@ class Transport:
             if e.left_low:
                 self._eject(k)
 
+    def _to_store(self, n: int, item_id: int):
+        self.store[n] = item_id
+        self.store_in[n] += 1
+
     # ---- T1
     def _move_t1(self, dt, running, ticks):
         p = self.pef
@@ -195,7 +200,7 @@ class Transport:
             for k in limited:
                 last[k] = it.pos
             if it.pos > self.t1_max():                 # rolled off the end -> store 1
-                self.store[0] = it.id
+                self._to_store(0, it.id)
                 continue
             keep.append(it)
         self.t1 = sorted(keep, key=lambda i: i.pos)    # oldest (front) item last
@@ -230,7 +235,7 @@ class Transport:
         for it in self.side[k]:
             it.pos += self.vel[k + 1] * dt
             if it.pos > self.side_max():
-                self.store[k + 1] = it.id
+                self._to_store(k + 1, it.id)
                 continue
             keep.append(it)
         self.side[k] = keep
@@ -263,7 +268,7 @@ class Transport:
         if cand:                                                # one item per stroke: the one best centred
             it = min(cand, key=lambda i: abs(i.pos + r - ejpos))
             if len(side) >= p.side_slots:
-                self.store[k + 1] = side.pop().id               # oldest item pushed out of the end
+                self._to_store(k + 1, side.pop().id)            # oldest item pushed out of the end
             self.t1.remove(it)
             side.insert(0, Item(it.id, 0.0))
             for j in range(1, len(side)):                       # prevent overlapping items

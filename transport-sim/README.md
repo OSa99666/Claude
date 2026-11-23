@@ -60,6 +60,13 @@ blocking logic is a proper queue (the library's per-item flag can leave stacked 
 front one is ejected); one stroke ejects only the best-centred item; a full side conveyor pushes its oldest item
 into the store.
 
+## 3D view
+
+New items roll down a ramp out of a transparent containment (hopper) at the start of T1; items that leave a belt
+end tip over the edge and fall into the store bin, where the stored item stays visible until the store is emptied.
+Items are drawn in the identification colours the PLC reads on `T_XCQ` (ARGB words from the simulator, so the view
+and the PLC always agree); the detector gate lamp shows the same word and stays off for untreated items.
+
 ## Quick start
 
 ```bash

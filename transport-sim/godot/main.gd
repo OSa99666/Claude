@@ -39,7 +39,14 @@ var pistons: Array[MeshInstance3D] = []
 var rods: Array[MeshInstance3D] = []
 var front_lamps: Array[MeshInstance3D] = []
 var det_lamp := MeshInstance3D.new()
-var store_boxes: Array[MeshInstance3D] = []
+var rest_nodes: Array[MeshInstance3D] = []     # item resting in each store bin
+var rest_mat: Array[StandardMaterial3D] = []
+var rest_id := [0, 0, 0, 0, 0]
+var store_in_seen := [-1, -1, -1, -1, -1]
+var fall_items: Array = []                     # items rolling off a belt end into a bin
+var end_pos: Array[Vector3] = []               # where items leave belt n (0 = T1, 1..4 = T2..T5)
+var end_dir: Array[Vector3] = []
+var colours_argb: Array = [0, 0xFF000065, 0xFF006500, 0xFF650000, 0xFF656500, 0xFFD0D0D0]   # T_XCQ item colours (from the simulator)
 var motor_lamps: Array[MeshInstance3D] = []
 
 var yaw := 0.75
@@ -47,12 +54,12 @@ var pitch := 0.6
 var dist := 7.0
 var target := Vector3(2.4, 0.0, 0.8)
 
-const TYPE_COLOURS := [Color(0.5, 0.5, 0.5), Color(0.2, 0.35, 1.0), Color(0.2, 0.8, 0.3),
-		Color(0.9, 0.2, 0.2), Color(0.95, 0.85, 0.2), Color(0.85, 0.85, 0.85)]
-# T_XCQ identification word (ARGB item colour) -> item type 1..4; type 5 (0xFFD0D0D0) is not detected
-const DETECT_TYPES := {0xFF000065: 1, 0xFF006500: 2, 0xFF650000: 3, 0xFF656500: 4}
 const METAL := Color(0.6, 0.63, 0.68)     # frame / sensor housing colour; detectors show this when off
 const BELT_W := 0.3
+const FLOOR_Y := -0.60                    # top of the ground / bin floors
+const RAMP_X0 := -0.45                    # item centre at the top of the feed ramp (x, m)
+const RAMP_SLOPE := 0.4                   # feed ramp: height = -0.4 * x for x in [-0.5, 0]
+const BIN := 0.4                          # inner size of the store bins
 const ITEM_H := 0.16
 
 
@@ -119,6 +126,23 @@ func _box(size: Vector3, pos: Vector3, mat: Material, parent: Node = null) -> Me
 	return mi
 
 
+## ARGB item colour word (as delivered on T_XCQ) -> Godot Color
+func _argb(c: int) -> Color:
+	return Color(float((c >> 16) & 255) / 255.0, float((c >> 8) & 255) / 255.0,
+			float(c & 255) / 255.0, float((c >> 24) & 255) / 255.0)
+
+
+func _tc(item_id: int) -> Color:
+	return _argb(int(colours_argb[clampi(item_id, 0, 5)]))
+
+
+func _glass() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.75, 0.85, 0.95, 0.22)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	return m
+
+
 func _cyl(radius: float, height: float, pos: Vector3, rot_deg: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
@@ -133,6 +157,16 @@ func _cyl(radius: float, height: float, pos: Vector3, rot_deg: Vector3) -> MeshI
 	return mi
 
 
+## Open-top container: floor + four walls, centre of the floor at `p`.
+func _bin(p: Vector3, m: Material) -> void:
+	var h := 0.4
+	_box(Vector3(BIN + 0.04, 0.02, BIN + 0.04), p + Vector3(0, 0.01, 0), m)
+	_box(Vector3(0.02, h, BIN + 0.04), p + Vector3(BIN / 2.0 + 0.01, h / 2.0, 0), m)
+	_box(Vector3(0.02, h, BIN + 0.04), p + Vector3(-BIN / 2.0 - 0.01, h / 2.0, 0), m)
+	_box(Vector3(BIN + 0.04, h, 0.02), p + Vector3(0, h / 2.0, BIN / 2.0 + 0.01), m)
+	_box(Vector3(BIN + 0.04, h, 0.02), p + Vector3(0, h / 2.0, -BIN / 2.0 - 0.01), m)
+
+
 # ------------------------------------------------------------- scene build
 func _build(g: Dictionary) -> void:
 	for c in world.get_children():
@@ -144,16 +178,22 @@ func _build(g: Dictionary) -> void:
 	pistons.clear()
 	rods.clear()
 	front_lamps.clear()
-	store_boxes.clear()
+	rest_nodes.clear()
+	rest_mat.clear()
+	fall_items.clear()
+	end_pos.clear()
+	end_dir.clear()
 	motor_lamps.clear()
 	var tm := float(g["tick_m"])
 	var tpi := float(g["tpi"])
 	var r := tpi / 2.0
-	var t1_len: float = (float(g["t1_len"]) + tpi) * tm
-	var side_len: float = (float(g["side_len"]) + tpi) * tm
+	# belts end where an item's centre leaves them: items tip over the edge into the store bins
+	var t1_len: float = (float(g["t1_len"]) + r) * tm
+	var side_len: float = (float(g["side_len"]) + r) * tm
 	var ej: Array = g["ej"]
 	var belt_mat := _mat(Color(0.22, 0.23, 0.26))
 	var frame_mat := _mat(METAL, 0.5)
+	var bin_mat := _mat(Color(0.35, 0.36, 0.42), 0.2)
 
 	# main conveyor T1: x from 0 to t1_len
 	_box(Vector3(t1_len, 0.06, BELT_W), Vector3(t1_len / 2.0, -0.04, 0), belt_mat)
@@ -190,11 +230,40 @@ func _build(g: Dictionary) -> void:
 		_box(Vector3(0.14 + 0.03, 0.03, 0.03), Vector3(x - 0.07, 0.31, 0.0), frame_mat)
 		var lamp := _box(Vector3(0.08, 0.05, 0.08), Vector3(x, 0.27, 0.0), _mat(METAL, 0.5))
 		front_lamps.append(lamp)
-		# store at the end of the side conveyor
-		var sb := _box(Vector3(0.3, 0.2, 0.3), Vector3(x, 0.0, z0 + side_len + 0.2), _mat(Color(0.35, 0.35, 0.4)))
-		store_boxes.append(sb)
-	# store 1 at the end of T1
-	store_boxes.push_front(_box(Vector3(0.3, 0.2, 0.3), Vector3(t1_len + 0.2, 0.0, 0), _mat(Color(0.35, 0.35, 0.4))))
+		# store bin below the end of the side conveyor
+		end_pos.append(Vector3(x, ITEM_H / 2.0, z0 + side_len))
+		end_dir.append(Vector3.BACK)
+		_bin(Vector3(x, FLOOR_Y, z0 + side_len + 0.1), bin_mat)
+		# legs
+		for lz in [z0 + 0.3, z0 + side_len - 0.3]:
+			for lx in [-0.1, 0.1]:
+				_cyl(0.025, 0.55, Vector3(x + lx, -0.345, lz), Vector3.ZERO)
+	# store 1 below the end of T1
+	end_pos.push_front(Vector3(t1_len, ITEM_H / 2.0, 0))
+	end_dir.push_front(Vector3.RIGHT)
+	_bin(Vector3(t1_len + 0.1, FLOOR_Y, 0), bin_mat)
+	for lx in [0.4, t1_len / 2.0, t1_len - 0.4]:
+		for lz in [-0.1, 0.1]:
+			_cyl(0.025, 0.55, Vector3(lx, -0.345, lz), Vector3.ZERO)
+	_box(Vector3(t1_len + 2.5, 0.02, side_len + 2.5), Vector3(t1_len / 2.0, FLOOR_Y - 0.01, side_len / 2.0), _mat(Color(0.17, 0.18, 0.2)))
+	# containment (hopper) with a feed ramp at the start of T1: new items roll down the ramp onto the belt
+	var ang := atan(RAMP_SLOPE)
+	var ramp := _box(Vector3(0.54, 0.02, BELT_W + 0.02), Vector3(-0.25, 0.1 - 0.01, 0), frame_mat)
+	ramp.rotation = Vector3(0, 0, -ang)
+	_box(Vector3(0.03, 0.6, BELT_W + 0.12), Vector3(-0.53, 0.3, 0), frame_mat)
+	for sz in [-1.0, 1.0]:
+		_box(Vector3(0.5, 0.5, 0.02), Vector3(-0.3, 0.3, sz * (BELT_W / 2.0 + 0.06)), _glass())
+	_box(Vector3(0.46, 0.02, BELT_W + 0.14), Vector3(-0.3, 0.55, 0), _glass())
+	for lz in [-0.1, 0.1]:
+		_cyl(0.025, 0.65, Vector3(-0.4, -0.295, lz), Vector3.ZERO)
+	# item resting in each bin (shown while the store holds an item)
+	for n in 5:
+		var bp: Vector3 = end_pos[n] + end_dir[n] * 0.1
+		var rm := _mat(Color.WHITE)
+		var rn := _box(Vector3(0.2, ITEM_H, 0.2), Vector3(bp.x, FLOOR_Y + 0.02 + ITEM_H / 2.0, bp.z), rm)
+		rn.visible = false
+		rest_nodes.append(rn)
+		rest_mat.append(rm)
 	# detector gate (centre of the detection window)
 	var dx := (float(g["det"]) + r) * tm
 	_box(Vector3(0.04, 0.3, 0.04), Vector3(dx, 0.1, BELT_W / 2.0 + 0.05), frame_mat)
@@ -216,7 +285,7 @@ func _build(g: Dictionary) -> void:
 			stripes.append([b, s, float(i) * float(info["pitch"])])
 	built_key = str(g)
 	# camera target: centre of T1
-	target = Vector3(t1_len / 2.0, 0.0, side_len / 2.0)
+	target = Vector3(t1_len / 2.0, -0.2, side_len / 2.0)
 	_update_camera()
 
 
@@ -383,7 +452,7 @@ func _item_node(i: int) -> MeshInstance3D:
 		mi.mesh = bm
 		var m := _mat(Color.WHITE)
 		mi.material_override = m
-		add_child(mi)
+		world.add_child(mi)
 		item_nodes.append(mi)
 		item_mat.append(m)
 	return item_nodes[i]
@@ -427,8 +496,8 @@ func _process(delta: float) -> void:
 	for it in msg["t1"]:
 		var n := _item_node(idx)
 		n.visible = true
-		n.position = Vector3((float(it[1]) + r) * tm, ITEM_H / 2.0 + 0.0, 0)
-		item_mat[idx].albedo_color = TYPE_COLOURS[int(it[0])]
+		_place_t1_item(n, float(it[1]), float(g["tpi"]), tm)
+		item_mat[idx].albedo_color = _tc(int(it[0]))
 		idx += 1
 	for k in 4:
 		var x := float(g["ej"][k]) * tm
@@ -436,7 +505,8 @@ func _process(delta: float) -> void:
 			var n := _item_node(idx)
 			n.visible = true
 			n.position = Vector3(x, ITEM_H / 2.0, BELT_W / 2.0 + (float(it[1]) + r) * tm)
-			item_mat[idx].albedo_color = TYPE_COLOURS[int(it[0])]
+			n.rotation = Vector3.ZERO
+			item_mat[idx].albedo_color = _tc(int(it[0]))
 			idx += 1
 	for j in range(idx, item_nodes.size()):
 		item_nodes[j].visible = false
@@ -462,15 +532,80 @@ func _process(delta: float) -> void:
 	for k in 4:
 		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1), METAL)
 	var xcq := int(io.get("T_XCQ", 0))
-	# gate lamp: colour of the detected item (types 1-4); off for no item and for untreated items (type 5)
-	var det_type: int = DETECT_TYPES.get(xcq, 0)
-	_lamp(det_lamp, det_type > 0, TYPE_COLOURS[det_type], METAL)
+	# gate lamp: exactly the colour word the PLC reads (T_XCQ); off for no item and for untreated items (type 5)
+	if msg.has("colours"):
+		colours_argb = msg["colours"]
+	var det_on := xcq != 0 and xcq != int(colours_argb[5])
+	_lamp(det_lamp, det_on, _argb(xcq), METAL)
 	var st: Array = msg["store"]
-	for n in 5:
-		var sm := store_boxes[n].material_override as StandardMaterial3D
-		sm.albedo_color = TYPE_COLOURS[int(st[n])] if int(st[n]) > 0 else Color(0.35, 0.35, 0.4)
+	_update_stores(st, msg.get("store_in", [0, 0, 0, 0, 0]), vel, tm, delta)
 
 	hud.text = _hud(io, msg.get("cmd", {}), run, st)
+
+
+## Item on T1.  The first item length is the feed ramp of the hopper (visual only): the item rolls down
+## the ramp and drops onto the belt.
+func _place_t1_item(n: MeshInstance3D, pos: float, tpi: float, tm: float) -> void:
+	var s := clampf(pos / tpi, 0.0, 1.0)
+	var cx := lerpf(RAMP_X0, (tpi + tpi / 2.0) * tm, s)
+	if pos >= tpi:
+		cx = (pos + tpi / 2.0) * tm
+	var blend := clampf(1.0 - cx / 0.12, 0.0, 1.0)             # 1 on the ramp, fades out just after its end
+	var h := maxf(0.0, -RAMP_SLOPE * cx)
+	n.position = Vector3(cx, ITEM_H / 2.0 + h * blend + ITEM_H * 0.08 * blend, 0)
+	n.rotation = Vector3(0, 0, -atan(RAMP_SLOPE) * blend)
+
+
+## Items that leave a belt end tip over the edge and fall into the store bin; the bin then shows the item.
+func _update_stores(st: Array, store_in: Array, vel: Array, tm: float, delta: float) -> void:
+	for n in 5:
+		var cnt := int(store_in[n])
+		if int(store_in_seen[n]) < 0 or cnt < int(store_in_seen[n]):
+			store_in_seen[n] = cnt                            # first packet / simulator restarted
+		elif cnt > int(store_in_seen[n]):
+			for _i in mini(cnt - int(store_in_seen[n]), 2):
+				_spawn_fall(n, int(st[n]), float(vel[n]) * tm)
+			store_in_seen[n] = cnt
+	var i := 0
+	while i < fall_items.size():
+		var f: Dictionary = fall_items[i]
+		var node: MeshInstance3D = f["node"]
+		f["vy"] = float(f["vy"]) - 9.81 * delta
+		f["pos"] = (f["pos"] as Vector3) + Vector3((f["dir"] as Vector3).x * float(f["speed"]) * delta, float(f["vy"]) * delta, (f["dir"] as Vector3).z * float(f["speed"]) * delta)
+		f["angle"] = minf(float(f["angle"]) + 4.9 * delta, PI / 2.0)       # tips forward while falling
+		node.position = f["pos"]
+		var axis := Vector3(0, 0, -1) if (f["dir"] as Vector3) == Vector3.RIGHT else Vector3(1, 0, 0)
+		node.basis = Basis(axis, float(f["angle"]))
+		if (f["pos"] as Vector3).y <= FLOOR_Y + 0.02 + ITEM_H / 2.0 + 0.01:
+			rest_id[int(f["store"])] = int(f["id"])
+			node.queue_free()
+			fall_items.remove_at(i)
+		else:
+			i += 1
+	for n in 5:
+		var falling := false
+		for f in fall_items:
+			if int(f["store"]) == n:
+				falling = true
+		if not falling and rest_id[n] != int(st[n]):
+			rest_id[n] = int(st[n])                           # e.g. item entered directly by the UI, or store emptied
+		rest_nodes[n].visible = int(rest_id[n]) > 0
+		if int(rest_id[n]) > 0:
+			rest_mat[n].albedo_color = _tc(int(rest_id[n]))
+
+
+func _spawn_fall(n: int, item_id: int, speed: float) -> void:
+	if item_id <= 0:
+		return
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.2, ITEM_H, 0.2)
+	mi.mesh = bm
+	mi.material_override = _mat(_tc(item_id))
+	mi.position = end_pos[n]
+	world.add_child(mi)
+	fall_items.append({"node": mi, "store": n, "id": item_id, "pos": end_pos[n], "dir": end_dir[n],
+			"speed": speed, "vy": 0.0, "angle": 0.0})
 
 
 func _b(v) -> String:

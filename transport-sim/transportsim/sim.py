@@ -17,7 +17,7 @@ import time
 
 from . import config as cfgmod
 from .opcua_server import SimServer
-from .transport import Pef, Transport
+from .transport import COLOURS, Pef, Transport
 from .ui_link import UiLink
 
 log = logging.getLogger("sim")
@@ -114,7 +114,7 @@ class Simulator:
                        "det": m.det_pos(), "ej": [m.ej_pos(k) for k in range(4)]},
                "t1": [[i.id, round(i.pos, 2)] for i in m.t1],
                "side": [[[i.id, round(i.pos, 2)] for i in s] for s in m.side],
-               "store": m.store, "run": [mo.at_high for mo in m.motors],
+               "store": m.store, "store_in": m.store_in, "colours": [0] + [COLOURS[i] for i in range(1, 6)], "run": [mo.at_high for mo in m.motors],
                "vel": [round(v, 2) for v in m.vel],
                "ej_pos": [round(e.pos, 3) for e in m.ejectors],
                "plc": self.clients > 0, "clients": self.clients,
