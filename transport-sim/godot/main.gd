@@ -116,6 +116,20 @@ func _box(size: Vector3, pos: Vector3, mat: Material, parent: Node = null) -> Me
 	return mi
 
 
+func _cyl(radius: float, height: float, pos: Vector3, rot_deg: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = radius
+	cm.bottom_radius = radius
+	cm.height = height
+	mi.mesh = cm
+	mi.material_override = _mat(Color(0.3, 0.1, 0.1), 0.3)
+	mi.position = pos
+	mi.rotation_degrees = rot_deg
+	world.add_child(mi)
+	return mi
+
+
 # ------------------------------------------------------------- scene build
 func _build(g: Dictionary) -> void:
 	for c in world.get_children():
@@ -166,8 +180,12 @@ func _build(g: Dictionary) -> void:
 		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.16), _mat(Color(0.9, 0.55, 0.15)), rod)
 		plate.name = "plate"
 		rods.append(rod)
-		# "item in front of ejector" sensor + lamp on the +Z side of T1
-		var lamp := _box(Vector3(0.06, 0.06, 0.06), Vector3(x, 0.13, BELT_W / 2.0 + 0.05), _mat(Color(0.3, 0.1, 0.1)))
+		# "item in front of ejector" sensor: bracket on the -Z side, sensor head above the ejection position
+		var bx := x - 0.14
+		_box(Vector3(0.03, 0.32, 0.03), Vector3(bx, 0.15, -BELT_W / 2.0 - 0.04), frame_mat)
+		_box(Vector3(0.03, 0.03, BELT_W / 2.0 + 0.06), Vector3(bx, 0.31, -BELT_W / 4.0 - 0.01), frame_mat)
+		_box(Vector3(0.14 + 0.03, 0.03, 0.03), Vector3(x - 0.07, 0.31, 0.0), frame_mat)
+		var lamp := _box(Vector3(0.08, 0.05, 0.08), Vector3(x, 0.27, 0.0), _mat(Color(0.3, 0.1, 0.1)))
 		front_lamps.append(lamp)
 		# store at the end of the side conveyor
 		var sb := _box(Vector3(0.3, 0.2, 0.3), Vector3(x, 0.0, z0 + side_len + 0.2), _mat(Color(0.35, 0.35, 0.4)))
@@ -180,10 +198,10 @@ func _build(g: Dictionary) -> void:
 	_box(Vector3(0.04, 0.3, 0.04), Vector3(dx, 0.1, -BELT_W / 2.0 - 0.05), frame_mat)
 	_box(Vector3(0.04, 0.04, BELT_W + 0.14), Vector3(dx, 0.25, 0), frame_mat)
 	det_lamp = _box(Vector3(0.08, 0.08, 0.08), Vector3(dx, 0.32, 0), _mat(Color(0.3, 0.1, 0.1)))
-	# motor lamps (one per conveyor) beside the belts' start
-	motor_lamps.append(_box(Vector3(0.08, 0.08, 0.08), Vector3(-0.15, 0.05, 0), _mat(Color(0.3, 0.1, 0.1))))
+	# motors (one per conveyor): cylinders at the side of each belt's start; colour = running
+	motor_lamps.append(_cyl(0.07, 0.2, Vector3(0.2, 0.08, -BELT_W / 2.0 - 0.14), Vector3(90, 0, 0)))
 	for k in 4:
-		motor_lamps.append(_box(Vector3(0.08, 0.08, 0.08), Vector3(float(ej[k]) * tm + BELT_W / 2.0 + 0.1, 0.05, BELT_W / 2.0 + 0.1), _mat(Color(0.3, 0.1, 0.1))))
+		motor_lamps.append(_cyl(0.07, 0.2, Vector3(float(ej[k]) * tm + BELT_W / 2.0 + 0.14, 0.08, BELT_W / 2.0 + 0.2), Vector3(0, 0, 90)))
 	# belt stripes (move with the belt speed)
 	for b in belt_info.size():
 		var info: Dictionary = belt_info[b]
