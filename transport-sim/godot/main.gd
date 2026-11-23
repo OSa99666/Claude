@@ -51,6 +51,7 @@ const TYPE_COLOURS := [Color(0.5, 0.5, 0.5), Color(0.2, 0.35, 1.0), Color(0.2, 0
 		Color(0.9, 0.2, 0.2), Color(0.95, 0.85, 0.2), Color(0.85, 0.85, 0.85)]
 # T_XCQ identification word (ARGB item colour) -> item type 1..4; type 5 (0xFFD0D0D0) is not detected
 const DETECT_TYPES := {0xFF000065: 1, 0xFF006500: 2, 0xFF650000: 3, 0xFF656500: 4}
+const METAL := Color(0.6, 0.63, 0.68)     # frame / sensor housing colour; detectors show this when off
 const BELT_W := 0.3
 const ITEM_H := 0.16
 
@@ -152,7 +153,7 @@ func _build(g: Dictionary) -> void:
 	var side_len: float = (float(g["side_len"]) + tpi) * tm
 	var ej: Array = g["ej"]
 	var belt_mat := _mat(Color(0.22, 0.23, 0.26))
-	var frame_mat := _mat(Color(0.6, 0.63, 0.68), 0.5)
+	var frame_mat := _mat(METAL, 0.5)
 
 	# main conveyor T1: x from 0 to t1_len
 	_box(Vector3(t1_len, 0.06, BELT_W), Vector3(t1_len / 2.0, -0.04, 0), belt_mat)
@@ -187,7 +188,7 @@ func _build(g: Dictionary) -> void:
 		_box(Vector3(0.03, 0.32, 0.03), Vector3(bx, 0.15, -BELT_W / 2.0 - 0.04), frame_mat)
 		_box(Vector3(0.03, 0.03, BELT_W / 2.0 + 0.06), Vector3(bx, 0.31, -BELT_W / 4.0 - 0.01), frame_mat)
 		_box(Vector3(0.14 + 0.03, 0.03, 0.03), Vector3(x - 0.07, 0.31, 0.0), frame_mat)
-		var lamp := _box(Vector3(0.08, 0.05, 0.08), Vector3(x, 0.27, 0.0), _mat(Color(0.3, 0.1, 0.1)))
+		var lamp := _box(Vector3(0.08, 0.05, 0.08), Vector3(x, 0.27, 0.0), _mat(METAL, 0.5))
 		front_lamps.append(lamp)
 		# store at the end of the side conveyor
 		var sb := _box(Vector3(0.3, 0.2, 0.3), Vector3(x, 0.0, z0 + side_len + 0.2), _mat(Color(0.35, 0.35, 0.4)))
@@ -199,7 +200,7 @@ func _build(g: Dictionary) -> void:
 	_box(Vector3(0.04, 0.3, 0.04), Vector3(dx, 0.1, BELT_W / 2.0 + 0.05), frame_mat)
 	_box(Vector3(0.04, 0.3, 0.04), Vector3(dx, 0.1, -BELT_W / 2.0 - 0.05), frame_mat)
 	_box(Vector3(0.04, 0.04, BELT_W + 0.14), Vector3(dx, 0.25, 0), frame_mat)
-	det_lamp = _box(Vector3(0.08, 0.08, 0.08), Vector3(dx, 0.32, 0), _mat(Color(0.3, 0.1, 0.1)))
+	det_lamp = _box(Vector3(0.08, 0.08, 0.08), Vector3(dx, 0.32, 0), _mat(METAL, 0.5))
 	# motors (one per conveyor): cylinders at the side of each belt's start; colour = running
 	motor_lamps.append(_cyl(0.07, 0.2, Vector3(0.2, 0.08, -BELT_W / 2.0 - 0.14), Vector3(90, 0, 0)))
 	for k in 4:
@@ -370,8 +371,8 @@ func _send_ui() -> void:
 
 
 # -------------------------------------------------------------------- update
-func _lamp(m: MeshInstance3D, on: bool, colour: Color) -> void:
-	(m.material_override as StandardMaterial3D).albedo_color = colour if on else Color(0.25, 0.1, 0.1)
+func _lamp(m: MeshInstance3D, on: bool, colour: Color, off_colour := Color(0.25, 0.1, 0.1)) -> void:
+	(m.material_override as StandardMaterial3D).albedo_color = colour if on else off_colour
 
 
 func _item_node(i: int) -> MeshInstance3D:
@@ -459,11 +460,11 @@ func _process(delta: float) -> void:
 	for b in 5:
 		_lamp(motor_lamps[b], bool(run[b]), Color(0.2, 1.0, 0.3))
 	for k in 4:
-		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1))
+		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1), METAL)
 	var xcq := int(io.get("T_XCQ", 0))
 	# gate lamp: colour of the detected item (types 1-4); off for no item and for untreated items (type 5)
 	var det_type: int = DETECT_TYPES.get(xcq, 0)
-	_lamp(det_lamp, det_type > 0, TYPE_COLOURS[det_type])
+	_lamp(det_lamp, det_type > 0, TYPE_COLOURS[det_type], METAL)
 	var st: Array = msg["store"]
 	for n in 5:
 		var sm := store_boxes[n].material_override as StandardMaterial3D
