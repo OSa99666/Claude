@@ -126,7 +126,7 @@ func _cyl(radius: float, height: float, pos: Vector3, rot_deg: Vector3) -> MeshI
 	cm.bottom_radius = radius
 	cm.height = height
 	mi.mesh = cm
-	mi.material_override = _mat(Color(0.3, 0.1, 0.1), 0.3)
+	mi.material_override = _mat(METAL, 0.5)
 	mi.position = pos
 	mi.rotation_degrees = rot_deg
 	world.add_child(mi)
@@ -458,7 +458,7 @@ func _process(delta: float) -> void:
 	var io: Dictionary = msg["io"]
 	var run: Array = msg["run"]
 	for b in 5:
-		_lamp(motor_lamps[b], bool(run[b]), Color(0.2, 1.0, 0.3))
+		_lamp(motor_lamps[b], bool(run[b]), Color(0.2, 1.0, 0.3), METAL)
 	for k in 4:
 		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1), METAL)
 	var xcq := int(io.get("T_XCQ", 0))
