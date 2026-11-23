@@ -172,14 +172,14 @@ func _build(g: Dictionary) -> void:
 		var cm := CylinderMesh.new()
 		cm.top_radius = 0.07
 		cm.bottom_radius = 0.07
-		cm.height = 0.3
+		cm.height = 0.5
 		cyl.mesh = cm
 		cyl.material_override = _mat(Color(0.3, 0.4, 0.6), 0.4)
-		cyl.position = Vector3(x, 0.08, -BELT_W / 2.0 - 0.3)
+		cyl.position = Vector3(x, 0.08, -BELT_W / 2.0 - 0.25)
 		cyl.rotation_degrees = Vector3(90, 0, 0)
 		world.add_child(cyl)
-		var rod := _box(Vector3(0.03, 0.03, 0.3), Vector3(x, 0.08, -BELT_W / 2.0 - 0.15), _mat(Color(0.8, 0.8, 0.85), 0.8))
-		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.16), _mat(Color(0.9, 0.55, 0.15)), rod)
+		var rod := _box(Vector3(0.03, 0.03, 0.5), Vector3(x, 0.08, -BELT_W / 2.0 - 0.25), _mat(Color(0.8, 0.8, 0.85), 0.8))
+		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.26), _mat(Color(0.9, 0.55, 0.15)), rod)
 		plate.name = "plate"
 		rods.append(rod)
 		# "item in front of ejector" sensor: bracket on the -Z side, sensor head above the ejection position
@@ -453,7 +453,7 @@ func _process(delta: float) -> void:
 	# ejectors, lamps, stores
 	var ejp: Array = msg["ej_pos"]
 	for k in 4:
-		rods[k].position.z = -BELT_W / 2.0 - 0.15 + float(ejp[k]) * 0.3
+		rods[k].position.z = -BELT_W / 2.0 - 0.25 + float(ejp[k]) * 0.3
 	var io: Dictionary = msg["io"]
 	var run: Array = msg["run"]
 	for b in 5:
