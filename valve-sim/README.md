@@ -58,7 +58,9 @@ a client that insists on 1000 ms faster.
 
 * Verified here: unit tests of the valve model, OPC UA round trip (Bool variables, open/close,
   force feedbacks, UI buttons), headless `run.sh` with the mock PLC.
-* **Not verified:** the Godot scene (no Godot in the development container) and the real PLC link.
-* Assumptions to check against `fbEucTwoStatesAni` (not in the supplied XML): behaviour with both commands,
-  the forced-feedback precedence, the forced-feedback semantics.  The `YG` position output of the
+* **Confirmed by the user:** the Godot scene (disc, lever, flow animation).  Later colour and camera-key changes
+  have not been run by the development environment (no Godot there), so the user checks them.
+* **Not verified:** the real PLC link / CODESYS program.
+* Assumptions to check against `fbEucTwoStatesAni` (not in the supplied XML): behaviour with both commands
+  (the previous command is kept) and the forced-feedback precedence (force false wins).  The `YG` position output of the
   library block is not an OPC UA variable (only the four Bools are); Godot shows the position.

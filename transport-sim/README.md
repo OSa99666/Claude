@@ -92,5 +92,8 @@ and port 4842; `publishing_interval_cap_ms = 20` serves a client that insists on
 * Verified here: model tests (speed scaling, start delay, detector/front sensors, barrier queue, sorting over
   8 random sequences of 150 s), OPC UA round trip (types of all 46 variables, motor, detector word, ejector
   feedbacks, UI force/empty commands), headless `run.sh` with the mock PLC.
-* **Not verified:** the Godot scene (no Godot in the development container) and the real PLC link.
+* **Confirmed by the user:** the Godot scene (conveyors, ejectors, sensors, colours).  The latest view changes (hopper
+  and ramp, items falling into the bins, ARGB colours, camera keys) were written without running Godot (none in the
+  development container), so the user checks them.
+* **Not verified:** the real PLC link / CODESYS program.
 * Open questions about `fbEucTwoStates` (not in the supplied XML): `ejector_travel_to_end` is assumed true.

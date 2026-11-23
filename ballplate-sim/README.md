@@ -12,7 +12,8 @@ which is also the user interface for the simulation parameters.
 └──────────────────┘           └─────────────────────────┘  UDP 9871 UI      └──────────────────────┘
 ```
 
-Only **eight INT words** go over OPC UA (same names as the PLC's `gIo`):
+Only **eight INT words** go over OPC UA (same names as the PLC's `gIo`; namespace `urn:ballplate:simulation`,
+folder `Ballplate`, server name `Ballplate simulator`, string node ids such as `F_YR10`):
 
 | Variable | Direction | Raw ±32000 means |
 |---|---|---|
@@ -119,6 +120,12 @@ The server then grants 20 ms instead of the requested interval (the log line say
 `publishing_interval_cap_ms in effect`) and scales keep-alive/lifetime so the client's time-outs do not
 change.  The client just receives notifications more often.  Whether the PLC applies them that often
 depends on the client; check the values in the PLC.
+
+## Sibling simulations
+
+The same pattern (own launcher, config and ports, OPC UA server + Godot view) is used by `../valve-sim`
+(bistable valve, OPC UA port 4841) and `../transport-sim` (conveyor sorting, port 4842); the table uses 4840,
+so all of them can run at the same time.
 
 ## Status
 
