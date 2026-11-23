@@ -67,6 +67,10 @@ end tip over the edge and fall into the store bin, where the stored item stays v
 Items are drawn in the identification colours the PLC reads on `T_XCQ` (ARGB words from the simulator, so the view
 and the PLC always agree); the detector gate lamp shows the same word and stays off for untreated items.
 
+## View controls
+
+Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).
+
 ## Quick start
 
 ```bash

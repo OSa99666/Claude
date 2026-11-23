@@ -75,3 +75,5 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Develop on branch `claude/optimistic-ramanujan-0bcprr`; push there.  Never put passwords/tokens in the repo.
   GitHub does not accept account passwords for git over HTTPS (use a token or SSH).
 - Run tests: `python -m pytest -q` in `ballplate-sim` (venv with `pip install -r requirements.txt`).
+- Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
+  middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.

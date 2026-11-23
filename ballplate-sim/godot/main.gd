@@ -40,6 +40,7 @@ var last_rx_ms := -100000
 var yaw := 0.7
 var pitch := 0.65
 var dist := 4.8
+var target := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -75,6 +76,7 @@ func _ready() -> void:
 	hud.position = Vector2(12, 8)
 	hud.add_theme_font_size_override("font_size", 16)
 	layer.add_child(hud)
+	_add_help(layer)
 	_build_panel(layer)
 	add_child(layer)
 
@@ -238,10 +240,12 @@ func _build(L: float, R: float, wh: float, t: float) -> void:
 	ball.position = Vector3(0, R, 0)
 	dist = 2.4 * L
 	_update_camera()
+	_save_home()
 
 
 # ------------------------------------------------------------------- per frame
 func _process(delta: float) -> void:
+	_camera_keys(delta)
 	while udp.get_available_packet_count() > 0:
 		var pkt := udp.get_packet()
 		var ip := udp.get_packet_ip()
@@ -305,6 +309,8 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(ev: InputEvent) -> void:
+	if _camera_event(ev):
+		return
 	if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT):
 		yaw -= ev.relative.x * 0.005
 		pitch = clampf(pitch + ev.relative.y * 0.005, 0.1, 1.5)
@@ -319,5 +325,87 @@ func _unhandled_input(ev: InputEvent) -> void:
 
 
 func _update_camera() -> void:
-	var p := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * dist
-	cam.look_at_from_position(p, Vector3.ZERO, Vector3.UP)
+	var p := target + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * dist
+	cam.look_at_from_position(p, target, Vector3.UP)
+
+
+# ------------------------------------------------------- camera: keyboard + middle mouse
+## Arrow keys pan the view (the scene moves in the arrow's direction), Shift+arrows orbit, +/- (or PageUp/Down)
+## zoom, Home resets the view; mouse: left drag orbits, middle drag pans, wheel zooms.
+const CAM_PITCH_MIN := 0.1
+const CAM_DIST_MIN := 0.5
+const CAM_DIST_MAX := 30.0
+var keys_armed := {}                # keys whose press reached us (not consumed by a focused UI control)
+var home := {}
+
+
+func _save_home() -> void:
+	home = {"yaw": yaw, "pitch": pitch, "dist": dist, "target": target}
+
+
+func _key_down(k: int) -> bool:
+	return bool(keys_armed.get(k, false)) and Input.is_key_pressed(k as Key)
+
+
+func _camera_keys(delta: float) -> void:
+	var dx := 0.0
+	var dy := 0.0
+	if _key_down(KEY_LEFT):
+		dx -= 1.0
+	if _key_down(KEY_RIGHT):
+		dx += 1.0
+	if _key_down(KEY_UP):
+		dy -= 1.0
+	if _key_down(KEY_DOWN):
+		dy += 1.0
+	var zoom := 0.0
+	if _key_down(KEY_EQUAL) or _key_down(KEY_KP_ADD) or _key_down(KEY_PLUS) or _key_down(KEY_PAGEUP):
+		zoom -= 1.0
+	if _key_down(KEY_MINUS) or _key_down(KEY_KP_SUBTRACT) or _key_down(KEY_PAGEDOWN):
+		zoom += 1.0
+	if dx == 0.0 and dy == 0.0 and zoom == 0.0:
+		return
+	if Input.is_key_pressed(KEY_SHIFT):
+		yaw -= dx * 1.5 * delta
+		pitch = clampf(pitch + dy * 1.5 * delta, CAM_PITCH_MIN, 1.5)
+	else:
+		var right := cam.global_transform.basis.x
+		var up := cam.global_transform.basis.y
+		target += (up * dy - right * dx) * dist * 0.5 * delta
+	dist = clampf(dist * exp(zoom * 1.2 * delta), CAM_DIST_MIN, CAM_DIST_MAX)
+	_update_camera()
+
+
+func _pan_drag(rel: Vector2) -> void:
+	var k := dist * 0.0015
+	target += (cam.global_transform.basis.y * rel.y - cam.global_transform.basis.x * rel.x) * k
+	_update_camera()
+
+
+func _camera_event(ev: InputEvent) -> bool:
+	if ev is InputEventKey:
+		if ev.pressed:
+			keys_armed[ev.keycode] = true
+			if ev.keycode == KEY_HOME and not ev.echo and not home.is_empty():
+				yaw = home["yaw"]
+				pitch = home["pitch"]
+				dist = home["dist"]
+				target = home["target"]
+				_update_camera()
+		return true
+	if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_MIDDLE):
+		_pan_drag(ev.relative)
+		return true
+	return false
+
+
+func _add_help(layer: CanvasLayer) -> void:
+	var help := Label.new()
+	help.text = "mouse: drag orbit, middle-drag pan, wheel zoom   |   keys: arrows pan, Shift+arrows orbit, +/- zoom, Home reset"
+	help.add_theme_font_size_override("font_size", 12)
+	help.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
+	help.anchor_top = 1.0
+	help.anchor_bottom = 1.0
+	help.offset_left = 12
+	help.offset_top = -24
+	layer.add_child(help)

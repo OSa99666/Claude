@@ -35,6 +35,10 @@ All parameters are in the Godot panel (defaults in `config/valve.toml`): transit
 travel-to-end, **safeguard High/Low** (`FSH`/`FSL`: forces the valve to that state, commands ignored; Low wins), **force feedbacks**
 true/false (`FH`/`FL`, for fault injection; false wins) and *Set to Low / Set to High* buttons.
 
+## View controls
+
+Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).
+
 ## Quick start
 
 ```bash

@@ -36,7 +36,7 @@ Scaling lives in `config/sim.toml` (`[scaling]`); the PLC must use the same rang
 
 Table dimensions (size, ball radius, wall height and thickness) are in `config/sim.toml` `[table]`;
 the wall thickness is purely visual, the physical wall is the table edge.
-Mouse: drag to orbit, wheel to zoom.  With **no OPC UA client connected the table levels itself**.
+Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).  With **no OPC UA client connected the table levels itself**.
 
 ## Physics (`ballplate/physics.py`)
 

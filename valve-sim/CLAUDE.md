@@ -22,3 +22,5 @@ The third one (conveyor sorting) is `../transport-sim`.
   0x656500, lever dark red 0x650000, metal (0.6,0.63,0.68), particles soft light blue.  Constants at the top of
   `godot/main.gd`.  Not run in Godot after this change (user checks visuals).
 - Naming convention (user): OPC UA folder and server name follow the project (`Ballplate`/`Ballplate simulator`, `Valve`/`Valve simulator`, `Transport`/`Transport simulator`).
+- Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
+  middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.

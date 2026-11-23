@@ -24,3 +24,5 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
   ARGB words in the state (`colours`, `T_XCQ`).  Written WITHOUT being run in Godot (download of a Godot binary into the dev
   container was blocked), so the user must check it.
 - Naming convention (user): OPC UA folder and server name follow the project (`Ballplate`/`Ballplate simulator`, `Valve`/`Valve simulator`, `Transport`/`Transport simulator`).
+- Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
+  middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
