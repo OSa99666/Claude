@@ -21,7 +21,7 @@ from . import subscription_tweaks
 
 log = logging.getLogger("opcua")
 
-FOLDER = "RollingTable"
+FOLDER = "Ballplate"
 PLC_TO_SIM = {"F_YR10": "Tilt X direction", "F_YR20": "Tilt Y direction"}
 SIM_TO_PLC = {
     "F_XG10": "Acceleration X direction", "F_XG11": "Velocity X direction",

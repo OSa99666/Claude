@@ -6,7 +6,7 @@ variables onto the IO words in `gIo`.
 
 ## Variables exposed by the simulator
 
-Namespace URI `urn:ballplate:simulation` (index differs per client - browse for it), folder `RollingTable`,
+Namespace URI `urn:ballplate:simulation` (index differs per client - browse for it), folder `Ballplate`,
 node ids are the string names below.  All variables are **Int16 (INT)**.
 
 | Variable | Direction | Raw range | Meaning |

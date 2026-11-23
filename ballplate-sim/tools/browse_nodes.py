@@ -1,4 +1,4 @@
-"""List the OPC UA nodes of a server (e.g. this simulator, to see the RollingTable variables).
+"""List the OPC UA nodes of a server (e.g. this simulator, to see the Ballplate variables).
 
     python -m tools.browse_nodes opc.tcp://127.0.0.1:4840 [user password]
 """

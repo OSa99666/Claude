@@ -22,7 +22,7 @@ inside the PLC (`fbTiltingTable`/`fbTiltingAxis`, point-mass per axis, PLCopen X
   Extras: walls removable (ball falls off), forced velocity/position holds, optional velocity clamp, `center()`.
 - `ballplate/sim.py`  10 ms cycle, 1 ms physics steps.  Runs the OPC UA **server**, receives UI values from
   Godot (UDP 9871), sends state to Godot (UDP 9870).  No OPC UA client connected => table levels itself.
-- `ballplate/opcua_server.py`  asyncua server, namespace `urn:ballplate:simulation`, folder `RollingTable`,
+- `ballplate/opcua_server.py`  asyncua server, namespace `urn:ballplate:simulation`, folder `Ballplate`,
   eight **Int16** variables only: `F_YR10/F_YR20` (PLC->sim tilt X/Y), `F_XG10/11/12` (accel/vel/dist X),
   `F_XG20/21/22` (Y).  Raw +-32000 scaling in `config/sim.toml [scaling]` (tilt +-15 deg, accel +-9.81 m/s2,
   dist +-1 m, velocity vel_min..vel_max default +-0.4 m/s).  The PLC must use the same ranges.
