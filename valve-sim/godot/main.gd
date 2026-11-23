@@ -139,7 +139,7 @@ func _build_valve() -> void:
 	add_child(lever)
 	var bar := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.7, 0.05, 0.08)
+	bm.size = Vector3(0.08, 0.05, 0.7)
 	bar.mesh = bm
 	bar.material_override = _mat(Color(0.9, 0.2, 0.2))
 	lever.add_child(bar)
@@ -274,9 +274,9 @@ func _process(delta: float) -> void:
 		_send_ui()
 
 	var pos := float(msg["pos"])
-	# disc: across the pipe at Low (0 deg), turned 90 deg along the pipe at High; lever bar along the pipe = open
+	# disc: across the pipe at Low (0 deg), turned 90 deg along the pipe at High
 	disc.rotation_degrees = Vector3(0, 90.0 * pos, 0)
-	lever.rotation_degrees = Vector3(0, 90.0 * (1.0 - pos), 0)
+	lever.rotation_degrees = Vector3(0, 90.0 * pos, 0)   # same direction as the disc: bar parallel to the disc plane
 	down_water_mat.albedo_color = Color(0.2, 0.5, 0.95, 1.0).lerp(Color(0.25, 0.27, 0.3), 1.0 - clampf((pos - 0.1) / 0.9, 0.0, 1.0))
 
 	var xgh := bool(msg["xgh"])
