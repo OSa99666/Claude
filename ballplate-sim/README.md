@@ -59,6 +59,9 @@ mock PLC and Godot; closing the Godot window or Ctrl+C stops all three; logs in 
                                                           # ~/godot/Godot_v*, or the Flatpak is used
 ```
 
+A desktop / app-menu icon for this simulation: `tools/install_desktop_launcher.sh` (extra arguments go to `run.sh`,
+e.g. `--no-mock` for the real PLC).
+
 Or step by step:
 
 ```bash

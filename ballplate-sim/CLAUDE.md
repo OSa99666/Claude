@@ -31,6 +31,7 @@ inside the PLC (`fbTiltingTable`/`fbTiltingAxis`, point-mass per axis, PLCopen X
 - `ballplate/mock_plc.py`  OPC UA *client* with a PD controller (stands in for the PLC); patterns center/circle/square.
 - `godot/main.gd`  3D view + control panel (elasticity, static/dynamic friction, velocity range, forced
   velocity/position, Center ball).  Elasticity < 0 removes the walls.  Physics is NOT in Godot.
+- `tools/install_desktop_launcher.sh`  creates the desktop/app-menu launcher (same script pattern in valve-sim and transport-sim).
 - `run.sh`  starts simulator + mock PLC + Godot (`--no-mock`, `--no-godot`, `--pattern`, `--publish-cap-ms`).
 - `tools/browse_nodes.py`, `tools/rate_check.py`  inspect the server / measure real update rates.
 - `codesys/`  ST controller example + notes for the CODESYS Data Source Manager (not compiled).
