@@ -34,3 +34,20 @@ Godot UI, not over OPC UA.
 
 `PLC_PRG_Example.st` + `FB_BallCtrl.st` are a small PD controller using these words.  They have not been
 compiled in CODESYS; the same algorithm (`CascadePD` in `ballplate/mock_plc.py`) is tested against the simulator.
+
+## Update rate: subscription time vs. DatasourcesTasks cycle (important)
+
+Found on the real PLC: the CODESYS Data Source Manager only keeps the subscription time you configure if it
+matches the cycle time of the **DatasourcesTasks** task.  On a mismatch it silently falls back to a **1000 ms**
+update rate (it then requests 1000 ms publishing/sampling from the server, queue size 1).  A subscription time
+of 40 ms needs a DatasourcesTasks cycle of 10 ms.  Symptom: the feedback words arrive about once per second
+even though the simulator and the network are fast (worst when many values change at once, e.g. a circular
+setpoint on both axes).
+
+* Set the DatasourcesTasks cycle time and the connection's update/subscription time as a matching pair
+  (subscription time = a multiple of the task cycle, e.g. 40 ms with 10 ms).
+* The simulator's `publishing_interval_cap_ms = 20` only helps a client that asks for something slower; with
+  matching CODESYS settings the client asks for its real interval and gets exactly that.
+* To see what the PLC really asks for: `grep -E "Subscription|MonitoredItems" logs/sim.log`.  `logs/sim.log` also
+  shows every 2 s the simulator timing, how often the PLC changes the tilt words (`PLC tilt words ...`) and
+  whether the PLC's client keeps up (`OPC UA publish: ... publish cycles starved ...`).

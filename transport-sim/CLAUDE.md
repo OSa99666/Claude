@@ -26,3 +26,4 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
 - Naming convention (user): OPC UA folder and server name follow the project (`Ballplate`/`Ballplate simulator`, `Valve`/`Valve simulator`, `Transport`/`Transport simulator`).
 - Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
   middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
+- CODESYS: subscription time must match the DatasourcesTasks cycle (40 ms needs 10 ms) or the DSM falls back to 1000 ms (see ballplate-sim/CLAUDE.md).

@@ -88,3 +88,6 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
   asyncua only publishes when the client has a PublishRequest outstanding; sim.log now logs every 2 s `OPC UA publish: ... notifications sent,
   N publish cycles starved (no PublishRequest from the client), longest gap` per subscription -> tells server-side vs client-side.  Experiment to
   try: `./run.sh --no-mock --publish-cap-ms 100` (less load on the PLC client).
+- CODESYS finding (user, real PLC): subscription time and the DatasourcesTasks cycle must match (40 ms needs a 10 ms task), otherwise the
+  Data Source Manager falls back to a 1000 ms update rate.  The reported 'freeze / slow feedback' was this, not the simulator.  Details in
+  `ballplate-sim/codesys/README.md`.  The extra diagnostics in sim.log (timing, PLC tilt writes, OPC UA publish stats) stay in as cheap checks.

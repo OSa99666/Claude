@@ -87,6 +87,9 @@ ejector when the item is in front of it - a minimum example of what the CODESYS 
 Connecting CODESYS: as for the rolling table (`../ballplate-sim/codesys/README.md`), with the variables above
 and port 4842; `publishing_interval_cap_ms = 20` serves a client that insists on 1000 ms faster.
 
+Note: the CODESYS Data Source Manager falls back to a 1000 ms update rate if the connection's subscription time and the
+DatasourcesTasks cycle time do not match (e.g. 40 ms needs a 10 ms task) - see `../ballplate-sim/codesys/README.md`.
+
 ## Status
 
 * Verified here: model tests (speed scaling, start delay, detector/front sensors, barrier queue, sorting over

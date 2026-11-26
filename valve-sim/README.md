@@ -54,6 +54,9 @@ Connecting CODESYS: same procedure as for the rolling table (`../ballplate-sim/c
 the Bool variables above and port 4841.  `publishing_interval_cap_ms = 20` in `config/valve.toml` serves
 a client that insists on 1000 ms faster.
 
+Note: the CODESYS Data Source Manager falls back to a 1000 ms update rate if the connection's subscription time and the
+DatasourcesTasks cycle time do not match (e.g. 40 ms needs a 10 ms task) - see `../ballplate-sim/codesys/README.md`.
+
 ## Status
 
 * Verified here: unit tests of the valve model, OPC UA round trip (Bool variables, open/close,
