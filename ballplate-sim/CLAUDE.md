@@ -77,17 +77,12 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Run tests: `python -m pytest -q` in `ballplate-sim` (venv with `pip install -r requirements.txt`).
 - Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
   middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
-- Diagnostics for the reported 'freezes ~1 s every 2 s' (not reproduced in the dev container: 100 state packets/s, no gap > 50 ms, also with a
-  20 ms-cap client): `logs/sim.log` now has a `timing:` line every 2 s (cycle avg/max, physics, OPC UA write, UDP send, longest gap,
-  late cycles) and a warning if the loop stalls > 100 ms; Godot F3 shows fps, packets/s, longest packet gap, max frame time.
-- Freeze investigation (user, real PLC, Godot on the same PC): sim timing and F3 are clean; sim.log shows the PLC asks for 1000 ms publishing/
-  sampling, queue 1, and the server grants 20 ms (cap works; revised sampling interval is 20 ms too).  Suspect the PLC->sim direction
-  (F_YR10/F_YR20 written slowly by the Data Source Manager): sim.log now logs 'PLC tilt words ... value changes in the last 2 s, longest pause'.
-- Update (user): not a freeze.  With a circular setpoint (both tilt words written every ~50 ms) the PLC's subscription feedback is slow (~1 s) while
-  Godot and the PLC writes are fast.  NOT reproduced with an asyncua client (50 notifications/s with 8 monitored items incl. the two F_YR echoes).
-  asyncua only publishes when the client has a PublishRequest outstanding; sim.log now logs every 2 s `OPC UA publish: ... notifications sent,
-  N publish cycles starved (no PublishRequest from the client), longest gap` per subscription -> tells server-side vs client-side.  Experiment to
-  try: `./run.sh --no-mock --publish-cap-ms 100` (less load on the PLC client).
+- Slow-feedback investigation, RESOLVED (it was the CODESYS configuration, see next bullet): it looked like the simulation froze ~1 s every
+  2 s, later like a ~1 s subscription feedback with a circular setpoint on both axes.  Sim timing, Godot F3 and the server's publishing were
+  all fine (server grants 20 ms; asyncua client: 50 notifications/s).  Diagnostics kept in `logs/sim.log` every 2 s: `timing:` (cycle avg/max,
+  physics, OPC UA write, UDP send, longest gap, late cycles; warning if the loop stalls > 100 ms), `PLC tilt words ...` (how often the PLC
+  changes F_YR10/F_YR20, longest pause) and `OPC UA publish: ...` (notifications sent, publish cycles starved = client had no PublishRequest
+  outstanding, longest gap).  Godot F3 overlay: fps, state packets/s, longest packet gap, max frame time.
 - CODESYS finding (user, real PLC): subscription time and the DatasourcesTasks cycle must match (40 ms needs a 10 ms task), otherwise the
   Data Source Manager falls back to a 1000 ms update rate.  The reported 'freeze / slow feedback' was this, not the simulator.  Details in
   `ballplate-sim/codesys/README.md`.  The extra diagnostics in sim.log (timing, PLC tilt writes, OPC UA publish stats) stay in as cheap checks.
