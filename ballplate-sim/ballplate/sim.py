@@ -65,6 +65,7 @@ class Simulator:
         self.raw_tilt = (0, 0)
         self.last_raw = {}
         self.stats = self._new_stats()
+        self.last_tilt_change = 0.0
         v = cfg["visual"]
         self.udp = None
         if v.get("enabled", True):
@@ -74,7 +75,7 @@ class Simulator:
     @staticmethod
     def _new_stats() -> dict:
         return {"n": 0, "cycle_sum": 0.0, "cycle_max": 0.0, "phys_max": 0.0, "write_max": 0.0, "send_max": 0.0,
-                "late": 0, "gap_max": 0.0}
+                "late": 0, "gap_max": 0.0, "tilt_changes": 0, "tilt_pause_max": 0.0}
 
     # ------------------------------------------------------------ UI -> model
     def apply_ui(self):
@@ -142,7 +143,12 @@ class Simulator:
     async def step_cycle(self):
         t_start = time.perf_counter()
         self.apply_ui()
-        self.raw_tilt = await self.server.read_tilts()
+        new_tilt = await self.server.read_tilts()
+        if new_tilt != self.raw_tilt:                     # the PLC wrote a different tilt word
+            self.stats["tilt_changes"] += 1
+            self.stats["tilt_pause_max"] = max(self.stats["tilt_pause_max"], self.t - self.last_tilt_change)
+            self.last_tilt_change = self.t
+        self.raw_tilt = new_tilt
         self.clients = self.server.client_count()
         sc = self.sc
         if self.clients == 0 and self.cfg["sim"].get("comm_loss_levels_table", True):
@@ -195,6 +201,9 @@ class Simulator:
                                  "UDP send max %.2f), longest gap between cycles %.1f ms, late cycles %d",
                                  1000 * st["cycle_sum"] / st["n"], 1000 * st["cycle_max"], 1000 * st["phys_max"],
                                  1000 * st["write_max"], 1000 * st["send_max"], 1000 * st["gap_max"], st["late"])
+                        log.info("PLC tilt words F_YR10/F_YR20: %d value changes in the last 2 s, longest pause between "
+                                 "changes %.0f ms (a PLC writing every 20 ms gives ~100 changes while the table is moving)",
+                                 st["tilt_changes"], 1000 * st["tilt_pause_max"])
                         if st["gap_max"] > 0.1:
                             log.warning("simulation loop stalled for %.0f ms in the last 2 s", 1000 * st["gap_max"])
                     self.stats = self._new_stats()

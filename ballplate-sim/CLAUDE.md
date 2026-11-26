@@ -80,3 +80,6 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Diagnostics for the reported 'freezes ~1 s every 2 s' (not reproduced in the dev container: 100 state packets/s, no gap > 50 ms, also with a
   20 ms-cap client): `logs/sim.log` now has a `timing:` line every 2 s (cycle avg/max, physics, OPC UA write, UDP send, longest gap,
   late cycles) and a warning if the loop stalls > 100 ms; Godot F3 shows fps, packets/s, longest packet gap, max frame time.
+- Freeze investigation (user, real PLC, Godot on the same PC): sim timing and F3 are clean; sim.log shows the PLC asks for 1000 ms publishing/
+  sampling, queue 1, and the server grants 20 ms (cap works; revised sampling interval is 20 ms too).  Suspect the PLC->sim direction
+  (F_YR10/F_YR20 written slowly by the Data Source Manager): sim.log now logs 'PLC tilt words ... value changes in the last 2 s, longest pause'.
