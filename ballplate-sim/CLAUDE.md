@@ -77,3 +77,6 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Run tests: `python -m pytest -q` in `ballplate-sim` (venv with `pip install -r requirements.txt`).
 - Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
   middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
+- Diagnostics for the reported 'freezes ~1 s every 2 s' (not reproduced in the dev container: 100 state packets/s, no gap > 50 ms, also with a
+  20 ms-cap client): `logs/sim.log` now has a `timing:` line every 2 s (cycle avg/max, physics, OPC UA write, UDP send, longest gap,
+  late cycles) and a warning if the loop stalls > 100 ms; Godot F3 shows fps, packets/s, longest packet gap, max frame time.

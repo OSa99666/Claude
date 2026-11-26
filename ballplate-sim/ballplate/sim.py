@@ -64,11 +64,17 @@ class Simulator:
         self.clients = 0
         self.raw_tilt = (0, 0)
         self.last_raw = {}
+        self.stats = self._new_stats()
         v = cfg["visual"]
         self.udp = None
         if v.get("enabled", True):
             self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.udp_addr = (v["host"], v["port"])
+
+    @staticmethod
+    def _new_stats() -> dict:
+        return {"n": 0, "cycle_sum": 0.0, "cycle_max": 0.0, "phys_max": 0.0, "write_max": 0.0, "send_max": 0.0,
+                "late": 0, "gap_max": 0.0}
 
     # ------------------------------------------------------------ UI -> model
     def apply_ui(self):
@@ -134,6 +140,7 @@ class Simulator:
 
     # ------------------------------------------------------------------ loop
     async def step_cycle(self):
+        t_start = time.perf_counter()
         self.apply_ui()
         self.raw_tilt = await self.server.read_tilts()
         self.clients = self.server.client_count()
@@ -144,31 +151,58 @@ class Simulator:
             tx = from_raw(self.raw_tilt[0], -sc["tilt_deg"], sc["tilt_deg"], sc["raw_max"])
             ty = from_raw(self.raw_tilt[1], -sc["tilt_deg"], sc["tilt_deg"], sc["raw_max"])
         self.model.set_tilt_setpoint_deg(tx, ty)
+        t_phys = time.perf_counter()
         for _ in range(self.nsub):
             self.model.step(self.dt)
         self.t += self.cycle
         self.last_raw = self.output_words()
+        t_io = time.perf_counter()
         await self.server.write_outputs(self.last_raw)
+        t_out = time.perf_counter()
         self.send_visual()
+        t_end = time.perf_counter()
+        st = self.stats
+        st["n"] += 1
+        st["cycle_sum"] += t_end - t_start
+        st["cycle_max"] = max(st["cycle_max"], t_end - t_start)
+        st["phys_max"] = max(st["phys_max"], t_io - t_phys)
+        st["write_max"] = max(st["write_max"], t_out - t_io)
+        st["send_max"] = max(st["send_max"], t_end - t_out)
 
     async def run(self):
         await self.server.start()
         self.ui = await UiLink.start(self.cfg["visual"]["command_port"])
         next_t = time.monotonic()
         last_log = 0.0
+        prev_end = None
         try:
             while True:
                 await self.step_cycle()
                 now = time.monotonic()
+                if prev_end is not None:
+                    self.stats["gap_max"] = max(self.stats["gap_max"], now - prev_end)
+                prev_end = now
                 if now - last_log > 2.0:
                     s = self.model.s
+                    st = self.stats
                     log.info("t=%6.1fs ball=(%+.3f,%+.3f)m tilt=(%+.1f,%+.1f)deg clients=%d %s",
                              self.t, s.x, s.y, math.degrees(s.tilt_x), math.degrees(s.tilt_y),
                              self.clients, "OFF TABLE" if s.off_table else
                              ("SLIP" if s.slipping else "roll"))
+                    if st["n"]:
+                        # timing of the last ~2 s: cycle = whole step, gap = time between two cycles (target 10 ms)
+                        log.info("timing: cycle avg %.2f / max %.2f ms (physics max %.2f, OPC UA write max %.2f, "
+                                 "UDP send max %.2f), longest gap between cycles %.1f ms, late cycles %d",
+                                 1000 * st["cycle_sum"] / st["n"], 1000 * st["cycle_max"], 1000 * st["phys_max"],
+                                 1000 * st["write_max"], 1000 * st["send_max"], 1000 * st["gap_max"], st["late"])
+                        if st["gap_max"] > 0.1:
+                            log.warning("simulation loop stalled for %.0f ms in the last 2 s", 1000 * st["gap_max"])
+                    self.stats = self._new_stats()
                     last_log = now
                 next_t += self.cycle
                 delay = next_t - time.monotonic()
+                if delay < 0:
+                    self.stats["late"] += 1
                 if delay < -5 * self.cycle:     # fell far behind: resync
                     next_t, delay = time.monotonic(), 0
                 await asyncio.sleep(max(0.0, delay))

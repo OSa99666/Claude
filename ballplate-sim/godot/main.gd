@@ -34,6 +34,14 @@ var built_R := -1.0
 var built_wh := -1.0
 var built_wt := -1.0
 var msg := {}
+# diagnostics (F3): frame rate and state-packet timing as seen by Godot
+var diag := false
+var diag_last_pkt_ms := 0
+var diag_gap_max := 0
+var diag_pkts := 0
+var diag_time := 0.0
+var diag_text := ""
+var diag_frame_max := 0.0
 var last_rx_ms := -100000
 
 # orbit camera
@@ -253,12 +261,26 @@ func _process(delta: float) -> void:
 		if parsed is Dictionary:
 			msg = parsed
 			last_rx_ms = Time.get_ticks_msec()
+			if diag_last_pkt_ms > 0:
+				diag_gap_max = maxi(diag_gap_max, last_rx_ms - diag_last_pkt_ms)
+			diag_last_pkt_ms = last_rx_ms
+			diag_pkts += 1
 			if ip != sim_host:
 				sim_host = ip
 				cmd.close()
 				cmd.set_dest_address(sim_host, cmd_port)
 			if not ui_ready and msg.has("params"):
 				_fill_ui(msg["params"])
+
+	diag_time += delta
+	if diag_time >= 2.0:
+		diag_text = "F3 diagnostics (last %.1f s): %d fps, %.0f state packets/s, longest gap between packets %d ms, frame time max %.0f ms" % [
+				diag_time, int(Engine.get_frames_per_second()), diag_pkts / diag_time, diag_gap_max, diag_frame_max * 1000.0]
+		diag_time = 0.0
+		diag_pkts = 0
+		diag_gap_max = 0
+		diag_frame_max = 0.0
+	diag_frame_max = maxf(diag_frame_max, delta)
 
 	var live := Time.get_ticks_msec() - last_rx_ms < 1000
 	if msg.is_empty() or not live:
@@ -306,6 +328,8 @@ func _process(delta: float) -> void:
 		int(tr[0]), int(tr[1]),
 		int(raw.get("F_XG10", 0)), int(raw.get("F_XG11", 0)), int(raw.get("F_XG12", 0)),
 		int(raw.get("F_XG20", 0)), int(raw.get("F_XG21", 0)), int(raw.get("F_XG22", 0))]
+	if diag:
+		hud.text += "\n\n" + diag_text
 
 
 func _unhandled_input(ev: InputEvent) -> void:
@@ -386,6 +410,8 @@ func _camera_event(ev: InputEvent) -> bool:
 	if ev is InputEventKey:
 		if ev.pressed:
 			keys_armed[ev.keycode] = true
+			if ev.keycode == KEY_F3 and not ev.echo:
+				diag = not diag
 			if ev.keycode == KEY_HOME and not ev.echo and not home.is_empty():
 				yaw = home["yaw"]
 				pitch = home["pitch"]
@@ -401,7 +427,7 @@ func _camera_event(ev: InputEvent) -> bool:
 
 func _add_help(layer: CanvasLayer) -> void:
 	var help := Label.new()
-	help.text = "mouse: drag orbit, middle-drag pan, wheel zoom   |   keys: arrows pan, Shift+arrows orbit, +/- zoom, Home reset"
+	help.text = "mouse: drag orbit, middle-drag pan, wheel zoom   |   keys: arrows pan, Shift+arrows orbit, +/- zoom, Home reset, F3 diagnostics"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
 	help.anchor_top = 1.0
