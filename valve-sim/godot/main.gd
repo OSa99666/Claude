@@ -19,6 +19,7 @@ var sim_host := ""
 
 var disc := Node3D.new()           # pivot: rotates about the vertical stem
 var lever := Node3D.new()
+var leds: Array[MeshInstance3D] = []     # V_YH, V_YL (command row), V_XGH, V_XGL (feedback row)
 var down_water := MeshInstance3D.new()
 var down_water_mat := StandardMaterial3D.new()
 var cam := Camera3D.new()
@@ -46,6 +47,8 @@ const WATER := Color8(0x00, 0x00, 0x65)         # dark blue
 const DISC := Color8(0x65, 0x65, 0x00)          # dark yellow
 const LEVER := Color8(0x65, 0x00, 0x00)         # dark red
 const PARTICLE := Color(0.55, 0.65, 0.85)
+const LED_HIGH := Color8(0x00, 0x65, 0x00)      # dark green: High / active / open
+const LED_LOW := Color8(0x65, 0x65, 0x00)       # dark yellow: Low / passive / closed
 
 var yaw := 0.6
 var pitch := 0.35
@@ -162,6 +165,29 @@ func _build_valve() -> void:
 	# stem + actuator housing
 	_cyl(0.05, 0.9, Vector3(0, 0.55, 0), steel)
 	_cyl(0.16, 0.3, Vector3(0, 0.95, 0), _mat(Color(0.25, 0.3, 0.4), 1.0, 0.3))
+	# four indicator LEDs on the front of the actuator: command row (V_YH, V_YL) above, feedback row (V_XGH, V_XGL) below
+	for row in 2:
+		var y := 1.03 - 0.11 * row
+		for col in 2:
+			var x := -0.06 + 0.12 * col
+			var led := MeshInstance3D.new()
+			var led_mesh := SphereMesh.new()
+			led_mesh.radius = 0.022
+			led_mesh.height = 0.044
+			led.mesh = led_mesh
+			led.material_override = _mat(METAL, 0.5)
+			led.position = Vector3(x, y, sqrt(0.16 * 0.16 - x * x) + 0.008)
+			add_child(led)
+			leds.append(led)
+		var lab := Label3D.new()
+		lab.text = "V_YH / V_YL" if row == 0 else "V_XGH / V_XGL"
+		lab.font_size = 28
+		lab.pixel_size = 0.002
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.modulate = Color(0.6, 0.65, 0.75)
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		lab.position = Vector3(0.2, y, 0.1)
+		add_child(lab)
 	# disc (flat cylinder); rotates about the vertical stem
 	var dm := CylinderMesh.new()
 	dm.top_radius = 0.28
@@ -280,6 +306,15 @@ func _send_ui() -> void:
 	cmd.put_packet(JSON.stringify(d).to_utf8_buffer())
 
 
+## LED: coloured (and glowing) when on, metal when off
+func _led(m: MeshInstance3D, on: bool, colour: Color) -> void:
+	var mat := m.material_override as StandardMaterial3D
+	mat.albedo_color = colour if on else METAL
+	mat.emission_enabled = on
+	mat.emission = colour
+	mat.emission_energy_multiplier = 1.5
+
+
 func _lamp(on: bool) -> String:
 	return "[###]" if on else "[   ]"
 
@@ -331,6 +366,10 @@ func _process(delta: float) -> void:
 
 	var xgh := bool(msg["xgh"])
 	var xgl := bool(msg["xgl"])
+	_led(leds[0], bool(msg["yh"]), LED_HIGH)
+	_led(leds[1], bool(msg["yl"]), LED_LOW)
+	_led(leds[2], xgh, LED_HIGH)
+	_led(leds[3], xgl, LED_LOW)
 	var state := "HIGH (open)" if pos >= 1.0 else ("LOW (closed)" if pos <= 0.0 else "travelling")
 	if bool(msg.get("waiting", false)):
 		state = "action delay ..."

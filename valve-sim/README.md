@@ -39,6 +39,11 @@ true/false (`FH`/`FL`, for fault injection; false wins) and *Set to Low / Set to
 
 Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).
 
+## View
+
+Four indicator LEDs sit on the valve actuator, with labels: the upper row shows the PLC commands `V_YH` (green) and
+`V_YL` (yellow), the lower row the feedbacks `V_XGH` (green) and `V_XGL` (yellow); an LED that is off shows the metal colour.
+
 ## Quick start
 
 ```bash

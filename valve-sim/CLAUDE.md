@@ -25,3 +25,6 @@ The third one (conveyor sorting) is `../transport-sim`.
 - Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
   middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
 - CODESYS: subscription time must match the DatasourcesTasks cycle (40 ms needs 10 ms) or the DSM falls back to 1000 ms (see ballplate-sim/CLAUDE.md).
+- Four LEDs on the actuator (command row V_YH/V_YL, feedback row V_XGH/V_XGL; green = High, yellow = Low, metal when off) with Label3D
+  captions.  GDScript gotcha: a `var` in a nested block must not reuse a name declared earlier in the enclosing function (e.g. `sm`).
+  Not run in Godot - user checks.
