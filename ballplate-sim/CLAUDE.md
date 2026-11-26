@@ -83,3 +83,8 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Freeze investigation (user, real PLC, Godot on the same PC): sim timing and F3 are clean; sim.log shows the PLC asks for 1000 ms publishing/
   sampling, queue 1, and the server grants 20 ms (cap works; revised sampling interval is 20 ms too).  Suspect the PLC->sim direction
   (F_YR10/F_YR20 written slowly by the Data Source Manager): sim.log now logs 'PLC tilt words ... value changes in the last 2 s, longest pause'.
+- Update (user): not a freeze.  With a circular setpoint (both tilt words written every ~50 ms) the PLC's subscription feedback is slow (~1 s) while
+  Godot and the PLC writes are fast.  NOT reproduced with an asyncua client (50 notifications/s with 8 monitored items incl. the two F_YR echoes).
+  asyncua only publishes when the client has a PublishRequest outstanding; sim.log now logs every 2 s `OPC UA publish: ... notifications sent,
+  N publish cycles starved (no PublishRequest from the client), longest gap` per subscription -> tells server-side vs client-side.  Experiment to
+  try: `./run.sh --no-mock --publish-cap-ms 100` (less load on the PLC client).

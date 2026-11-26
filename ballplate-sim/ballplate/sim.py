@@ -16,6 +16,7 @@ import socket
 import time
 
 from . import config as cfgmod
+from . import subscription_tweaks
 from .opcua_server import SimServer
 from .physics import BallPlate, Params
 from .scaling import from_raw, to_raw
@@ -204,6 +205,8 @@ class Simulator:
                         log.info("PLC tilt words F_YR10/F_YR20: %d value changes in the last 2 s, longest pause between "
                                  "changes %.0f ms (a PLC writing every 20 ms gives ~100 changes while the table is moving)",
                                  st["tilt_changes"], 1000 * st["tilt_pause_max"])
+                        for line in subscription_tweaks.snapshot():
+                            log.info("OPC UA publish: %s", line)
                         if st["gap_max"] > 0.1:
                             log.warning("simulation loop stalled for %.0f ms in the last 2 s", 1000 * st["gap_max"])
                     self.stats = self._new_stats()

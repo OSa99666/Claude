@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import time
 
 from asyncua import ua
 from asyncua.common import utils
@@ -32,6 +33,22 @@ log = logging.getLogger("opcua.subs")
 _applied = False
 _cap_ms = 0.0
 _tasks: set[asyncio.Task] = set()
+_pub: dict[int, dict] = {}              # subscription id -> publish statistics since the last snapshot()
+
+
+def snapshot() -> list[str]:
+    """Publish statistics per subscription since the last call (and reset them), as log-ready strings.
+
+    published = notifications sent to the client; starved = publish cycles in which data was waiting but the
+    client had no PublishRequest outstanding (the client is the bottleneck, not the server);
+    max gap = longest time between two notifications sent."""
+    out = []
+    for sid, d in sorted(_pub.items()):
+        out.append("subscription %d: %d notifications sent, %d publish cycles starved (no PublishRequest from the client), "
+                   "longest gap between notifications %.0f ms, values waiting now %d"
+                   % (sid, d["pub"], d["starved"], 1000 * d["max_gap"], d["waiting"]))
+        d.update(pub=0, starved=0, max_gap=0.0)
+    return out
 
 
 def _restart_publish_loop(sub) -> None:
@@ -104,6 +121,26 @@ def _patch() -> None:
         result.RevisedMaxKeepAliveCount = sub.data.RevisedMaxKeepAliveCount
         return result
 
+    from asyncua.server.internal_subscription import InternalSubscription as IS
+    orig_publish = IS.publish_results
+
+    async def publish_results(self, requestdata=None):
+        sid = self.data.SubscriptionId
+        d = _pub.setdefault(sid, {"pub": 0, "starved": 0, "max_gap": 0.0, "last": None, "waiting": 0})
+        before = self._publish_cycles_count
+        ok = await orig_publish(self, requestdata)
+        now = time.monotonic()
+        if ok:
+            d["pub"] += 1
+            if d["last"] is not None:
+                d["max_gap"] = max(d["max_gap"], now - d["last"])
+            d["last"] = now
+        elif self._publish_cycles_count > before:
+            d["starved"] += 1
+        d["waiting"] = sum(len(v) for v in self._triggered_datachanges.values())
+        return ok
+
+    IS.publish_results = publish_results
     S.create_subscription = create_subscription
     S.create_monitored_items = create_monitored_items
     S.modify_subscription = modify_subscription
