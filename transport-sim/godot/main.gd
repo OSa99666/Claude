@@ -36,7 +36,7 @@ var stripes: Array = []             # [belt index, MeshInstance3D, phase offset]
 var belt_info: Array = []           # per belt: {len, along, origin, pitch}
 var stripe_phase := [0.0, 0.0, 0.0, 0.0, 0.0]
 var pistons: Array[MeshInstance3D] = []
-var rods: Array[MeshInstance3D] = []
+var rods: Array[Node3D] = []
 var front_lamps: Array[MeshInstance3D] = []
 var det_lamp := MeshInstance3D.new()
 var rest_nodes: Array[MeshInstance3D] = []     # item resting in each store bin
@@ -227,8 +227,21 @@ func _build(g: Dictionary) -> void:
 		cyl.position = Vector3(x, 0.08, -BELT_W / 2.0 - 0.25)
 		cyl.rotation_degrees = Vector3(90, 0, 0)
 		world.add_child(cyl)
-		var rod := _box(Vector3(0.03, 0.03, 0.5), Vector3(x, 0.08, -BELT_W / 2.0 - 0.25), _mat(Color(0.8, 0.8, 0.85), 0.8))
-		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.26), _mat(Color(0.9, 0.55, 0.15)), rod)
+		# piston: round rod (cylinder along Z) with the pusher plate at its front end, same metal colour
+		var rod := Node3D.new()
+		rod.position = Vector3(x, 0.08, -BELT_W / 2.0 - 0.25)
+		world.add_child(rod)
+		var rod_mat := _mat(Color(0.8, 0.8, 0.85), 0.8)
+		var rod_cyl := MeshInstance3D.new()
+		var rod_mesh := CylinderMesh.new()
+		rod_mesh.top_radius = 0.015
+		rod_mesh.bottom_radius = 0.015
+		rod_mesh.height = 0.5
+		rod_cyl.mesh = rod_mesh
+		rod_cyl.material_override = rod_mat
+		rod_cyl.rotation_degrees = Vector3(90, 0, 0)
+		rod.add_child(rod_cyl)
+		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.26), rod_mat, rod)
 		plate.name = "plate"
 		rods.append(rod)
 		_add_ejector_leds(x, "E%d" % (k + 1))
