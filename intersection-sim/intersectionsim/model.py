@@ -306,6 +306,15 @@ class Intersection:
 
     # --------------------------------------------------------------- collision
     def _check_collisions(self):
+        # rear-end collisions inside a lane: the follower stops at the rear of the car in front (no overlap), both are crashed
+        for arm in ARMS:
+            lane = sorted((c for c in self.cars if c.arm == arm), key=lambda c: -c.s)
+            for lead, foll in zip(lane, lane[1:]):
+                if lead.s - lead.length - foll.s < 0.0 and not (lead.crashed and foll.crashed):
+                    foll.s = lead.s - lead.length - 0.02
+                    for c in (lead, foll):
+                        c.crashed, c.v = True, 0.0
+                    self._crash()
         live = [c for c in self.cars if True]
         for i, a in enumerate(live):
             for b in live[i + 1:]:

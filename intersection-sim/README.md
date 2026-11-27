@@ -60,7 +60,8 @@ Manager mapping they should be unique, for example:
 * **Pedestrians**: group 1 walks along direction 1 and uses the crosswalks over the direction-2 road (north / south arms), so `I_YPL1G` is
   meant to be green while the direction-1 traffic light is green; group 2 the other way round.  A pedestrian presses the push button, waits and
   starts to cross when the pedestrian light is green (feedback) and no car is about to reach the crosswalk.
-* **Collision** (not an IO): two vehicles of different directions overlap (e.g. both lights green), or a vehicle hits a pedestrian.  The vehicles stay
+* **Collision** (not an IO): two vehicles of different directions overlap (e.g. both lights green), a vehicle hits a pedestrian, or a vehicle runs into the
+  one in front in its own lane (rear-end: the follower stops at the rear of the car in front, no overlap, both turn red).  The vehicles stay
   as wrecks with a crash smiley; it stays latched until *Clear collision* in the panel (the PLC only sees the effect on the detectors).
 * Scoreboard (in the HUD): vehicles passed, average wait, queues, pedestrians crossed / average wait, red-light violations, crashes.
 * Faults for the exercises (panel): broken lamps (feedback reads false, drivers see a dark lamp), detectors dead / stuck, push buttons stuck.
@@ -73,7 +74,7 @@ Manager mapping they should be unique, for example:
 ./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4844
 ./run.sh --no-godot      # headless
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
-pytest                                  # 13 tests incl. a real OPC UA round trip
+pytest                                  # 15 tests incl. a real OPC UA round trip
 ```
 
 CODESYS: same procedure as for the rolling table (`../ballplate-sim/codesys/README.md`).  The subscription time must match the

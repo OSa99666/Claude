@@ -152,3 +152,32 @@ def test_fixed_time_controller_no_crash_and_throughput():
     assert not m.crash and m.stats["crashes"] == 0
     assert m.stats["cars_passed"] > 60 and m.stats["peds_crossed"] > 10
     assert m.stats["violations"] == 0
+
+
+def test_rear_end_collision_stops_at_the_car_in_front_and_marks_both_crashed():
+    m = quiet()
+    lead = m.add_car("W", s=-20.0, v=0.0)
+    lead.crashed = True                                              # a wreck standing in the lane
+    foll = m.add_car("W", s=-40.0, v=10.0)
+    foll.go = True                                                   # does not brake (e.g. runner / driver error)
+    foll.runner = True
+    # make the follower unable to brake: remove the leader from its car-following by a very short gap
+    foll.s = lead.s - lead.length - 1.0
+    run(m, 3.0, GREEN1)
+    assert m.crash and m.stats["crashes"] == 1
+    assert foll.crashed and lead.crashed
+    assert foll.s <= lead.s - lead.length + 1e-6                      # no overlap
+    m.clear_fault()
+    assert not m.cars and not m.crash
+
+
+def test_normal_queue_never_overlaps():
+    m = Intersection(Params(rate={"W": 40, "E": 40, "N": 40, "S": 40}, ped_rate={1: 0, 2: 0}), seed=4)
+    ctrl = FixedTime(green=8.0)
+    for _ in range(int(300 / DT)):
+        m.step(DT, ctrl.step(DT, {"PD1": m.btn[1], "PD2": m.btn[2]}))
+        for arm in "WENS":
+            lane = sorted((c for c in m.cars if c.arm == arm), key=lambda c: -c.s)
+            for lead, foll in zip(lane, lane[1:]):
+                assert lead.s - lead.length - foll.s >= -1e-6
+    assert not m.crash
