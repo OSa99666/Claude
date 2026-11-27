@@ -59,8 +59,8 @@ inside the PLC (`fbTiltingTable`/`fbTiltingAxis`, point-mass per axis, PLCopen X
   on Fedora KDE was unreliable; Ubuntu GNOME remote desktop works.
 
 ## Status
-- 25 tests pass (physics, scaling, closed loop with INT quantisation, real OPC UA round trips,
-  subscription modify/cap).  Godot UI and the OPC UA link to the real Pi were confirmed working by the user.
+- 33 tests pass (physics, scaling, closed loop with INT quantisation, real OPC UA round trips,
+  subscription modify/cap, test aids).  Godot UI and the OPC UA link to the real Pi were confirmed working by the user.
 - Not verified: the CODESYS ST example (`codesys/*.st`) has not been compiled (reference only; control is external).
 
 ## Possible next steps
@@ -89,3 +89,9 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - Godot view (latest): base + central pivot post/ball joint + two servos with horn and connecting rod to the plate underside (`_build_mechanism`,
   `_update_mechanism`); horn angles by two-bar-linkage IK from the plate tilt (rod length stays constant, checked numerically, horn about +-48 deg at
   +-15 deg tilt).  Visual only.  Not run in Godot - user checks.
+- Test aids (user-requested): `ballplate/testaids.py` (`Imperfections`/`ImperfectionPipeline`: feedback noise/delay/quantisation, tilt dead time/backlash/offset;
+  `Faults`: feedback freeze, actuator stick, pushes, own RNG; `Metrics`: error/settling/overshoot/in-zone/RMS vs a UI target), sticky patch + `kick()` in
+  `physics.py`, `release()` + UI plumbing in `sim.py` (`_apply_test_aid_ui/_actions`, `test_params`).  `ui_link.py` now handles every `*_seq` counter generically
+  (`take(key)`).  Config sections `[imperfections]`, `[faults]` (all 0).  Godot: tabs Dynamics/Imperfections/Faults/Scenario/View, target ring, patch disc,
+  ball trail (ImmediateMesh), servo angle labels, metrics + faults in the HUD.  Tests: 33 pass.  The PLC setpoint is NOT known to the sim (only 8 words), so the
+  metrics use a separate UI target.  Godot part not run - user checks.

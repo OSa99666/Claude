@@ -21,6 +21,18 @@ var sim_host := ""
 var table := Node3D.new()
 # servo mechanism below the plate: base, central pivot, two servos with horn + connecting rod to the plate
 var mech := Node3D.new()                # static parts (rebuilt with the table)
+var lbl_x := Label3D.new()              # servo angle read-outs
+var lbl_y := Label3D.new()
+var seqs := {}                          # one-shot button counters (keys end with _seq)
+# markers on the plate (children of the table, so they tilt with it)
+var tgt_ring := MeshInstance3D.new()
+var tgt_dot := MeshInstance3D.new()
+var tgt_zone_built := -1.0
+var patch_disc := MeshInstance3D.new()
+var patch_r_built := -1.0
+var trail_mesh := MeshInstance3D.new()
+var trail_pts: Array[Vector3] = []
+var trail_timer := 0.0
 var mech_geo := {}                      # D (attachment distance), a (horn length), sy (shaft height), rod (rod length)
 var horn_x := Node3D.new()              # rotating horn of servo X (tilt about the Z axis)
 var horn_y := Node3D.new()              # rotating horn of servo Y (tilt about the X axis)
@@ -112,8 +124,11 @@ func _build_panel(layer: CanvasLayer) -> void:
 	panel.visible = false
 	layer.add_child(panel)
 
-	var box := VBoxContainer.new()
-	panel.add_child(box)
+	panel.anchor_bottom = 1.0
+	panel.offset_bottom = -34
+	var tabs := TabContainer.new()
+	panel.add_child(tabs)
+	var box := _tab(tabs, "Dynamics")
 
 	_heading(box, "Dynamics")
 	_spin(box, "Elasticity (<0: no walls)", -1.0, 1.0, 0.05, "elasticity")
@@ -138,6 +153,88 @@ func _build_panel(layer: CanvasLayer) -> void:
 	b.pressed.connect(_on_center)
 	box.add_child(b)
 
+	var imp := _tab(tabs, "Imperfections")
+	_heading(imp, "Sensor feedback (F_XG words)")
+	_spin(imp, "Noise distance [mm, std dev]", 0.0, 50.0, 0.1, "imp_noise_pos")
+	_spin(imp, "Noise velocity [mm/s]", 0.0, 100.0, 0.5, "imp_noise_vel")
+	_spin(imp, "Noise acceleration [m/s2]", 0.0, 5.0, 0.01, "imp_noise_acc")
+	_spin(imp, "Delay [ms]", 0.0, 500.0, 5.0, "imp_delay_ms")
+	_spin(imp, "Quantisation [bits] (16 = off)", 1.0, 16.0, 1.0, "imp_quant_bits")
+	_heading(imp, "Tilt actuator (F_YR words)")
+	_spin(imp, "Dead time [ms]", 0.0, 500.0, 5.0, "imp_dead_ms")
+	_spin(imp, "Backlash [deg]", 0.0, 5.0, 0.05, "imp_backlash")
+	_spin(imp, "Calibration offset X [deg]", -5.0, 5.0, 0.05, "imp_off_x")
+	_spin(imp, "Calibration offset Y [deg]", -5.0, 5.0, 0.05, "imp_off_y")
+
+	var flt := _tab(tabs, "Faults")
+	_heading(flt, "Random faults (0 = off)")
+	_spin(flt, "Pushes per minute", 0.0, 60.0, 0.5, "f_kick_per_min")
+	_spin(flt, "Push size [m/s]", 0.0, 2.0, 0.05, "f_kick_v")
+	_spin(flt, "Feedback freezes per minute", 0.0, 60.0, 0.5, "f_freeze_per_min")
+	_spin(flt, "Freeze duration [s]", 0.0, 30.0, 0.5, "f_freeze_s")
+	_spin(flt, "Actuator sticks per minute", 0.0, 60.0, 0.5, "f_stick_per_min")
+	_spin(flt, "Stick duration [s]", 0.0, 30.0, 0.5, "f_stick_s")
+	_spin(flt, "Seed (0 = random)", 0.0, 99999.0, 1.0, "f_seed")
+	_button(flt, "Restart random generators / apply seed", "f_restart_seq")
+	_heading(flt, "Trigger now")
+	_button(flt, "Push the ball (random direction)", "kick_seq")
+	_button(flt, "Freeze the feedback words", "freeze_seq")
+	_button(flt, "Stick the tilt actuator", "stick_seq")
+	_heading(flt, "Sticky patch on the plate")
+	_check(flt, "Sticky patch", "patch_on")
+	_spin(flt, "Patch centre X [m]", -1.0, 1.0, 0.05, "patch_x")
+	_spin(flt, "Patch centre Y [m]", -1.0, 1.0, 0.05, "patch_y")
+	_spin(flt, "Patch radius [m]", 0.05, 1.0, 0.05, "patch_r")
+	_spin(flt, "Extra rolling drag [g]", 0.0, 1.0, 0.01, "patch_drag")
+
+	var scn := _tab(tabs, "Scenario")
+	_heading(scn, "Release the ball")
+	_spin(scn, "Position X [m]", -0.9, 0.9, 0.05, "rel_x")
+	_spin(scn, "Position Y [m]", -0.9, 0.9, 0.05, "rel_y")
+	_spin(scn, "Velocity X [m/s]", -1.0, 1.0, 0.05, "rel_vx")
+	_spin(scn, "Velocity Y [m/s]", -1.0, 1.0, 0.05, "rel_vy")
+	_button(scn, "Release ball here", "release_seq")
+	_button(scn, "Random release (seeded)", "release_random_seq")
+	_heading(scn, "Target for the measurement")
+	_spin(scn, "Target X [m]", -0.9, 0.9, 0.05, "tgt_x")
+	_spin(scn, "Target Y [m]", -0.9, 0.9, 0.05, "tgt_y")
+	_spin(scn, "Zone radius [m]", 0.01, 0.5, 0.01, "tgt_r")
+	_button(scn, "Start measurement now", "metrics_start_seq")
+	var note := Label.new()
+	note.text = "A measurement starts on release, when the target\nchanges, or with the button.  Settled = inside the\nzone for 1 s.  The target is only used for the\nmeasurement, the PLC has its own setpoint."
+	note.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
+	scn.add_child(note)
+
+	var vw := _tab(tabs, "View")
+	_heading(vw, "View aids")
+	_check(vw, "Show ball trail", "show_trail")
+	(controls["show_trail"] as CheckBox).set_pressed_no_signal(true)
+	var bt := Button.new()
+	bt.text = "Clear trail"
+	bt.pressed.connect(func() -> void: trail_pts.clear())
+	vw.add_child(bt)
+
+
+func _tab(tabs: TabContainer, title: String) -> VBoxContainer:
+	var sc := ScrollContainer.new()
+	sc.name = title
+	sc.custom_minimum_size = Vector2(390, 300)
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var box := VBoxContainer.new()
+	sc.add_child(box)
+	tabs.add_child(sc)
+	return box
+
+
+func _button(parent: Control, text: String, key: String) -> void:
+	var b := Button.new()
+	b.text = text
+	seqs[key] = 0
+	b.pressed.connect(func() -> void:
+		seqs[key] += 1
+		_send_ui())
+	parent.add_child(b)
+
 
 func _heading(parent: Control, text: String) -> void:
 	var l := Label.new()
@@ -150,7 +247,7 @@ func _spin(parent: Control, text: String, lo: float, hi: float, step: float, key
 	var row := HBoxContainer.new()
 	var l := Label.new()
 	l.text = text
-	l.custom_minimum_size = Vector2(230, 0)
+	l.custom_minimum_size = Vector2(210, 0)
 	var sb := SpinBox.new()
 	sb.min_value = lo
 	sb.max_value = hi
@@ -192,6 +289,8 @@ func _send_ui() -> void:
 	if not ui_ready or sim_host == "":
 		return
 	var d := {"center_seq": center_seq}
+	for k in seqs:
+		d[k] = seqs[k]
 	for k in controls:
 		var c = controls[k]
 		d[k] = c.value if c is SpinBox else c.button_pressed
@@ -244,6 +343,7 @@ func _build(L: float, R: float, wh: float, t: float) -> void:
 		table.add_child(w)
 	# centre cross
 	_build_mechanism(L)
+	_build_markers()
 	table.add_child(_box(Vector3(0.2, 0.004, 0.01), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
 	table.add_child(_box(Vector3(0.01, 0.004, 0.2), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
 
@@ -259,6 +359,104 @@ func _build(L: float, R: float, wh: float, t: float) -> void:
 	target = Vector3(0, -0.12 * L, 0)         # a little lower, so the mechanism below the plate is in view
 	_update_camera()
 	_save_home()
+
+
+# ------------------------------------------------------- markers on the plate
+func _build_markers() -> void:
+	var gold := Color8(0x65, 0x65, 0x00)
+	tgt_ring = MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.044
+	tm.outer_radius = 0.056
+	tgt_ring.mesh = tm
+	tgt_ring.material_override = _flat_mat(gold)
+	table.add_child(tgt_ring)
+	tgt_dot = MeshInstance3D.new()
+	var dm := CylinderMesh.new()
+	dm.top_radius = 0.012
+	dm.bottom_radius = 0.012
+	dm.height = 0.004
+	tgt_dot.mesh = dm
+	tgt_dot.material_override = _flat_mat(gold)
+	table.add_child(tgt_dot)
+	tgt_zone_built = -1.0
+	patch_disc = MeshInstance3D.new()
+	var pm := CylinderMesh.new()
+	pm.top_radius = 0.25
+	pm.bottom_radius = 0.25
+	pm.height = 0.003
+	patch_disc.mesh = pm
+	var pmat := StandardMaterial3D.new()
+	pmat.albedo_color = Color(0.45, 0.3, 0.15, 0.55)
+	pmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	patch_disc.material_override = pmat
+	patch_disc.visible = false
+	table.add_child(patch_disc)
+	patch_r_built = -1.0
+	trail_mesh = MeshInstance3D.new()
+	trail_mesh.mesh = ImmediateMesh.new()
+	var trmat := StandardMaterial3D.new()
+	trmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	trmat.albedo_color = Color(0.9, 0.9, 0.5)
+	trail_mesh.material_override = trmat
+	table.add_child(trail_mesh)
+	trail_pts.clear()
+
+
+func _flat_mat(c: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	m.roughness = 0.6
+	return m
+
+
+func _update_markers(delta: float) -> void:
+	var met: Dictionary = msg.get("metrics", {})
+	if not met.is_empty():
+		var tg: Array = met["target"]
+		var zone := float(met["zone"])
+		var pos := Vector3(float(tg[0]), 0.004, -float(tg[1]))
+		tgt_ring.position = pos
+		tgt_dot.position = pos
+		if absf(zone - tgt_zone_built) > 1e-6:
+			var tm := tgt_ring.mesh as TorusMesh
+			tm.inner_radius = maxf(zone - 0.006, 0.001)
+			tm.outer_radius = zone + 0.006
+			tgt_zone_built = zone
+		var err := float(met["err"])
+		var col := Color8(0x00, 0x65, 0x00) if (err >= 0.0 and err <= zone) else Color8(0x65, 0x65, 0x00)
+		(tgt_ring.material_override as StandardMaterial3D).albedo_color = col
+		(tgt_dot.material_override as StandardMaterial3D).albedo_color = col
+	var pt: Dictionary = msg.get("patch", {})
+	if not pt.is_empty():
+		patch_disc.visible = bool(pt["on"])
+		patch_disc.position = Vector3(float(pt["x"]), 0.0025, -float(pt["y"]))
+		if absf(float(pt["r"]) - patch_r_built) > 1e-6:
+			var pm := patch_disc.mesh as CylinderMesh
+			pm.top_radius = float(pt["r"])
+			pm.bottom_radius = float(pt["r"])
+			patch_r_built = float(pt["r"])
+	# ball trail: table-local points every 50 ms; a jump (release / centre) clears it
+	var show := bool((controls["show_trail"] as CheckBox).button_pressed)
+	var im := trail_mesh.mesh as ImmediateMesh
+	im.clear_surfaces()
+	if not show:
+		trail_pts.clear()
+		return
+	trail_timer += delta
+	if trail_timer >= 0.05 and not bool(msg.get("off", false)):
+		trail_timer = 0.0
+		var p := Vector3(float(msg["x"]), 0.006, -float(msg["y"]))
+		if not trail_pts.is_empty() and p.distance_to(trail_pts[trail_pts.size() - 1]) > 0.3:
+			trail_pts.clear()
+		trail_pts.append(p)
+		if trail_pts.size() > 120:
+			trail_pts.remove_at(0)
+	if trail_pts.size() > 1:
+		im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+		for tp in trail_pts:
+			im.surface_add_vertex(tp)
+		im.surface_end()
 
 
 # ------------------------------------------------------------ servo mechanism
@@ -311,6 +509,8 @@ func _build_mechanism(L: float) -> void:
 	horn_y = Node3D.new()
 	rod_x = MeshInstance3D.new()
 	rod_y = MeshInstance3D.new()
+	lbl_x = _servo_label(Vector3(0.35 * L - 0.125 * L, -0.275 * L + 0.22, 0.2))
+	lbl_y = _servo_label(Vector3(0.2, -0.275 * L + 0.22, 0.35 * L - 0.125 * L))
 	var d := 0.35 * L                      # distance of the rod attachments from the plate centre
 	var a := 0.125 * L                     # horn length
 	var base_top := -0.45 * L              # top of the base plate below the plate
@@ -355,6 +555,17 @@ func _build_mechanism(L: float) -> void:
 	table.add_child(_ball_node(0.026, Vector3(0, attach_y, d), MECH_JOINT))
 
 
+func _servo_label(pos: Vector3) -> Label3D:
+	var lab := Label3D.new()
+	lab.font_size = 26
+	lab.pixel_size = 0.0022
+	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lab.modulate = Color(0.75, 0.8, 0.9)
+	lab.position = pos
+	mech.add_child(lab)
+	return lab
+
+
 ## Horn angle (from the +u axis towards +v) so that a horn of length a on a shaft at s reaches a rod of length rod_len
 ## ending at point p (two-bar linkage, elbow on the outer side).
 func _horn_angle(s: Vector2, p: Vector2, a: float, rod_len: float) -> float:
@@ -384,11 +595,13 @@ func _update_mechanism() -> void:
 	var phi := _horn_angle(Vector2(d - a, sy), Vector2(ax.x, ax.y), a, rl)
 	horn_x.rotation = Vector3(0, 0, phi)
 	_place_rod(rod_x, Vector3(d - a + a * cos(phi), sy + a * sin(phi), 0), ax)
+	lbl_x.text = "servo X %+.1f deg" % rad_to_deg(phi)
 	# servo Y: attachment at the +z side of the plate (sim -y), horn in the z-y plane (u = z, v = y)
 	var ay := table.basis * Vector3(0, attach_y, d)
 	phi = _horn_angle(Vector2(d - a, sy), Vector2(ay.z, ay.y), a, rl)
 	horn_y.rotation = Vector3(-phi, 0, 0)
 	_place_rod(rod_y, Vector3(0, sy + a * sin(phi), d - a + a * cos(phi)), ay)
+	lbl_y.text = "servo Y %+.1f deg" % rad_to_deg(phi)
 
 
 # ------------------------------------------------------------------- per frame
@@ -457,6 +670,7 @@ func _process(delta: float) -> void:
 	ball.position = Vector3(float(msg["x"]), R + float(msg.get("z", 0.0)), -float(msg["y"]))
 	var q: Array = msg["q"]   # w, x, y, z in the simulator frame
 	ball.quaternion = Quaternion(float(q[1]), float(q[3]), -float(q[2]), float(q[0])).normalized()
+	_update_markers(delta)
 
 	var raw: Dictionary = msg.get("raw", {})
 	var tr: Array = msg.get("tilt_raw", [0, 0])
@@ -469,8 +683,37 @@ func _process(delta: float) -> void:
 		int(tr[0]), int(tr[1]),
 		int(raw.get("F_XG10", 0)), int(raw.get("F_XG11", 0)), int(raw.get("F_XG12", 0)),
 		int(raw.get("F_XG20", 0)), int(raw.get("F_XG21", 0)), int(raw.get("F_XG22", 0))]
+	hud.text += _hud_test_aids()
 	if diag:
 		hud.text += "\n\n" + diag_text
+
+
+## Control-quality measurement and active faults.
+func _hud_test_aids() -> String:
+	var t := ""
+	var met: Dictionary = msg.get("metrics", {})
+	if not met.is_empty():
+		var tg: Array = met["target"]
+		var err := float(met["err"])
+		t += "\n\ntarget (%+.2f, %+.2f) m, zone %.2f m   error %s" % [float(tg[0]), float(tg[1]), float(met["zone"]),
+				"(off table)" if err < 0.0 else "%.3f m" % err]
+		if bool(met["running"]):
+			var st := "settled at %.1f s" % float(met["settle_time"]) if bool(met["settled"]) else "not settled"
+			t += "\nrun %.1f s   %s   overshoot %.1f %% (%.3f m)   in zone %.0f %%   RMS %.3f m" % [
+					float(met["t"]), st, float(met["overshoot_pct"]), float(met["overshoot_m"]),
+					float(met["in_zone_pct"]), float(met["rms"])]
+		else:
+			t += "\n(no measurement: release the ball, move the target or press Start measurement)"
+	var fl: Dictionary = msg.get("faults", {})
+	var lines: Array = []
+	if not fl.is_empty():
+		if float(fl["freeze"]) > 0.0:
+			lines.append("feedback frozen %.1f s" % float(fl["freeze"]))
+		if float(fl["stick"]) > 0.0:
+			lines.append("tilt actuator stuck %.1f s" % float(fl["stick"]))
+	if not lines.is_empty():
+		t += "\n\nFAULTS: " + "; ".join(PackedStringArray(lines))
+	return t
 
 
 func _unhandled_input(ev: InputEvent) -> void:

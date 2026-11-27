@@ -51,6 +51,21 @@ Solid sphere, table frame.  Ball/table Coulomb friction with static and kinetic 
 wall friction that couples into vertical-axis spin.  Tilt actuator: first-order lag, ±15°, 60°/s rate limit.
 Setpoints/holds, velocity clamp and the falling ball are in the same file.
 
+## Test aids (Godot panel tabs *Imperfections*, *Faults*, *Scenario*, *View*; defaults in `config/sim.toml`)
+
+* **Imperfections** (all off by default): noise on the distance / velocity / acceleration words, a delay and a coarser
+  quantisation (bits) of the feedback words `F_XG..`; dead time, backlash and a calibration offset of the tilt command
+  `F_YR..`.  The ideal simulation hides problems that real sensors and servos cause.
+* **Faults:** random or triggered pushes of the ball, **feedback freeze** (stuck sensor / communication drop: the
+  `F_XG..` words keep their old values), **tilt actuator stuck** (holds its last command), and a **sticky patch** on the
+  plate (circle with extra rolling drag).  A seed and *Restart random generators* make a run repeatable.
+* **Scenario:** *Release ball here* (position and velocity) and *Random release (seeded)*, and a **target** with a zone
+  radius for the measurement.  The HUD then shows the error, **settling time** (inside the zone for 1 s), **overshoot**,
+  time in the zone and RMS error of the current run; a run starts on release, when the target moves, or with *Start
+  measurement*.  (The PLC's own setpoint is not visible to the simulator, so the target is only used for the measurement.)
+* **View aids:** a ball trail (switch and *Clear trail* on the *View* tab), a ring marking the target (turns green while
+  the ball is inside), the sticky patch, and the servo angles as numbers next to the servos.
+
 ## Quick start
 
 One command starts everything (creates `.venv` on first run, waits for the OPC UA port, then starts the
@@ -134,7 +149,7 @@ so all of them can run at the same time.
 
 ## Status
 
-* Verified here: all 25 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
+* Verified here: all 33 tests (physics, scaling, closed loop with INT quantisation, and an asyncua
   client talking to the simulator: Int16 variables, tilt → ball motion, hold velocity/position, centring,
   walls removed → ball off table → outputs 0).
 * **Confirmed by the user on real hardware:** the Godot UI, and the OPC UA link to the Raspberry Pi /
