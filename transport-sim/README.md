@@ -60,6 +60,22 @@ blocking logic is a proper queue (the library's per-item flag can leave stacked 
 front one is ejected); one stroke ejects only the best-centred item; a full side conveyor pushes its oldest item
 into the store.
 
+## Test aids (Godot panel; defaults in `config/transport.toml` `[feed]` / `[faults]`)
+
+* **Repeatable item feed** (tab *Items*): tick *Fixed repeating sequence* and enter the item types (e.g. `1,2,3,4,5`), or
+  set a *seed* for the random mode (0 = random); *Restart sequence / apply seed* starts again from the beginning, so
+  the PLC sees exactly the same items every run.  *Feed rate* limits the feed to N items/min (0 = as fast as there is
+  room).  The random faults below use their own generator and never change the item sequence.
+* **Scoreboard** (top-left text, *Reset scoreboard* on the *Items* tab): items fed, sorted correctly, **wrong**, in
+  transit, and the number of items per store.  Type *k* (1-4) belongs in store *k+1*, untreated type 5 in store 1; an item
+  that reaches any other store counts as wrong (also a type 1-4 item that was not ejected and ran into store 1).
+* **Faults** (tab *Faults*, all off by default): random ejector jams per stroke (the ejector freezes half way for a
+  while, both feedbacks false, and it does not push its item), random sensor dropouts (detector and item-in-front sensors read
+  false for a short time), random conveyor motor trips.  A **tripped motor stays off until the PLC drops its start command
+  `T_YH1n` and sets it again** (`T_XGH1n` goes false while the command is still on).  Buttons trigger a trip,
+  a jam on the next ejector stroke, or a sensor dropout at once.  Active faults are listed in the HUD, a tripped motor turns red.
+  Slower strokes are set on the *Timing* tab.
+
 ## 3D view
 
 New items roll down a ramp out of a transparent containment (hopper) at the start of T1; items that leave a belt
@@ -84,7 +100,7 @@ its cylinder: a command row (`T_YH2n` extend, `T_YL2n` retract) and a feedback r
 ./run.sh --no-godot      # headless
 ./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
-pytest                                  # 8 tests incl. a real OPC UA round trip and a sorting run
+pytest                                  # 18 tests incl. a real OPC UA round trip and a sorting run
 ```
 
 The mock PLC (`transportsim/mock_plc.py`) tracks the item types from the detector and fires the right

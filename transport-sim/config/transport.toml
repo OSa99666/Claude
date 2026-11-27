@@ -32,6 +32,19 @@ ejector_delay_from_high_ms = 1000   # wait before retracting
 ejector_delay_from_low_ms  = 100    # wait before extending
 ejector_travel_to_end = true        # a started stroke is completed even if the command is removed
 
+# Item feed (UI values override these while running)
+[feed]
+sequence     = ""         # e.g. "1,2,3,4,5" = fixed repeating sequence; empty = random types
+rate_per_min = 0          # 0 = feed as fast as there is room on T1
+
+# Random faults for testing the PLC's error handling (all off by default; UI values override)
+[faults]
+ejector_jam_probability = 0.0    # per ejector stroke, 0..1
+ejector_jam_s           = 3.0
+sensor_dropouts_per_min = 0.0    # while a sensor is active
+sensor_dropout_s        = 0.4
+conveyor_trips_per_min  = 0.0    # per conveyor; a trip lasts until the PLC drops and sets its start command again
+
 # Layout in item slots (slot n starts at (n-1)*ticks_per_item; positions refer to the item's centre)
 [layout]
 t1_offload_slot = 19      # item leaves T1 into store 1 after 19 slots

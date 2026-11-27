@@ -341,6 +341,14 @@ func _build_panel(layer: CanvasLayer) -> void:
 	_heading(feed, "Item feed on T1")
 	_check(feed, "Feed items  (XE)", "feed")
 	_check(feed, "Allow untreated items, type 5  (XE01)", "feed_untreated")
+	_heading(feed, "Item sequence (for repeatable tests)")
+	_check(feed, "Fixed repeating sequence instead of random", "feed_pattern_on")
+	_line(feed, "Sequence (item types 1-5)", "feed_pattern")
+	_spin(feed, "Seed, random mode (0 = random)", 0.0, 99999.0, 1.0, "feed_seed")
+	_spin(feed, "Feed rate [items/min] (0 = max)", 0.0, 120.0, 1.0, "feed_rate")
+	_button(feed, "Restart sequence / apply seed", "restart_feed_seq")
+	_button(feed, "Reset scoreboard", "reset_stats_seq")
+	_heading(feed, "Single actions")
 	_button(feed, "Feed single item  (XES)", "feed_single_seq")
 	_button(feed, "Empty transport  (RX)", "empty_transport_seq")
 	_heading(feed, "Stores")
@@ -361,6 +369,24 @@ func _build_panel(layer: CanvasLayer) -> void:
 	_spin(tim, "Period at full speed [ms]", 2.0, 500.0, 1.0, "period_min_ms")
 	_spin(tim, "Period at min speed [ms]", 3.0, 1000.0, 1.0, "period_max_ms")
 	_spin(tim, "Ticks per animation tick", 1.0, 10.0, 1.0, "anim_ticks")
+
+	var flt := _tab(tabs, "Faults")
+	_heading(flt, "Random faults (0 = off)")
+	_spin(flt, "Ejector jam per stroke [%]", 0.0, 100.0, 1.0, "f_jam_pct")
+	_spin(flt, "Jam duration [s]", 0.0, 60.0, 0.5, "f_jam_s")
+	_spin(flt, "Sensor dropouts per minute", 0.0, 600.0, 1.0, "f_drop_per_min")
+	_spin(flt, "Dropout duration [s]", 0.0, 10.0, 0.1, "f_drop_s")
+	_spin(flt, "Conveyor trips per minute (each)", 0.0, 60.0, 0.5, "f_trip_per_min")
+	_heading(flt, "Trigger now")
+	for n in range(1, 6):
+		_button(flt, "Trip conveyor T%d" % n, "trip%d_seq" % n)
+	for k in range(1, 5):
+		_button(flt, "Jam ejector %d on its next stroke" % k, "jam%d_seq" % k)
+	_button(flt, "Drop out all sensors now", "drop_all_seq")
+	var note := Label.new()
+	note.text = "A tripped conveyor stays off until the PLC drops\nits start command (T_YH1n) and sets it again."
+	note.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
+	flt.add_child(note)
 
 	var frc := _tab(tabs, "Forces")
 	_array_checks(frc, "Force stop motor  (FSL11-15)", "force_stop_motor", 5)
@@ -405,6 +431,20 @@ func _spin(parent: Control, text: String, lo: float, hi: float, step: float, key
 	controls[key] = sb
 
 
+func _line(parent: Control, text: String, key: String) -> void:
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = text
+	l.custom_minimum_size = Vector2(200, 0)
+	var le := LineEdit.new()
+	le.custom_minimum_size = Vector2(170, 0)
+	le.text_changed.connect(func(_t: String) -> void: _send_ui())
+	row.add_child(l)
+	row.add_child(le)
+	parent.add_child(row)
+	controls[key] = le
+
+
 func _check(parent: Control, text: String, key: String) -> void:
 	var cb := CheckBox.new()
 	cb.text = text
@@ -446,6 +486,8 @@ func _fill_ui(p: Dictionary) -> void:
 			c.set_value_no_signal(float(p[k]))
 		elif c is CheckBox:
 			c.set_pressed_no_signal(bool(p[k]))
+		elif c is LineEdit:
+			c.text = str(p[k])
 		elif c is Array:
 			for i in c.size():
 				c[i].set_pressed_no_signal(bool(p[k][i]))
@@ -465,6 +507,8 @@ func _send_ui() -> void:
 			d[k] = c.value
 		elif c is CheckBox:
 			d[k] = c.button_pressed
+		elif c is LineEdit:
+			d[k] = c.text
 		elif c is Array:
 			var a := []
 			for cb in c:
@@ -563,6 +607,7 @@ func _process(delta: float) -> void:
 	var io: Dictionary = msg["io"]
 	var run: Array = msg["run"]
 	var cmd_in: Dictionary = msg.get("cmd", {})
+	var fl_trip: Array = (msg.get("faults", {}) as Dictionary).get("trip", [false, false, false, false, false])
 	for k in 4:
 		var e: Array = ej_leds[k]
 		_led(e[0], bool(cmd_in.get("T_YH2%d" % (k + 1), false)), LED_HIGH)
@@ -570,7 +615,10 @@ func _process(delta: float) -> void:
 		_led(e[2], bool(io.get("T_XGH2%d" % (k + 1), false)), LED_HIGH)
 		_led(e[3], bool(io.get("T_XGL2%d" % (k + 1), false)), LED_LOW)
 	for b in 5:
-		_lamp(motor_lamps[b], bool(run[b]), _tc(2), METAL)     # same green as the type-2 items
+		if bool(fl_trip[b]):
+			_lamp(motor_lamps[b], true, _tc(3), METAL)         # tripped: red (same red as the type-3 items)
+		else:
+			_lamp(motor_lamps[b], bool(run[b]), _tc(2), METAL)     # same green as the type-2 items
 		_led(motor_leds[b][0], bool(cmd_in.get("T_YH1%d" % (b + 1), false)), LED_HIGH)
 		_led(motor_leds[b][1], bool(io.get("T_XGH1%d" % (b + 1), false)), LED_HIGH)
 	for k in 4:
@@ -795,6 +843,29 @@ func _hud(io: Dictionary, c: Dictionary, run: Array, st: Array) -> String:
 	t += "Stores BQ01-05: "
 	for n in 5:
 		t += "%s " % _b(io.get("T_BQ0%d" % (n + 1), false))
+	var stt: Dictionary = msg.get("stats", {})
+	if not stt.is_empty():
+		var arr: Array = stt["arrived"]
+		t += "\n\nScoreboard: fed %d, sorted correctly %d, WRONG %d, in transit %d\n  items per store 1-5: %d / %d / %d / %d / %d" % [
+				int(stt["fed"]), int(stt["correct"]), int(stt["wrong"]), int(stt["in_transit"]),
+				int(arr[0]), int(arr[1]), int(arr[2]), int(arr[3]), int(arr[4])]
+		if str(stt.get("last_wrong", "")) != "":
+			t += "\n  last wrong: " + str(stt["last_wrong"])
+	var fl: Dictionary = msg.get("faults", {})
+	var fault_lines: Array = []
+	if not fl.is_empty():
+		for i in 5:
+			if bool(fl["trip"][i]):
+				fault_lines.append("T%d tripped (reset: drop T_YH1%d)" % [i + 1, i + 1])
+		for k in 4:
+			if float(fl["jam"][k]) > 0.0:
+				fault_lines.append("ejector %d jammed %.1f s" % [k + 1, float(fl["jam"][k])])
+			elif bool(fl["jam_next"][k]):
+				fault_lines.append("ejector %d jams on its next stroke" % (k + 1))
+		if bool(fl["drop"].has(true)):
+			fault_lines.append("sensor dropout")
+	if not fault_lines.is_empty():
+		t += "\n\nFAULTS: " + "; ".join(PackedStringArray(fault_lines))
 	return t
 
 

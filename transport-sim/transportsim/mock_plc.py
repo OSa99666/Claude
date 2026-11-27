@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import time
 
 from asyncua import Client, ua
 
@@ -31,12 +32,27 @@ class Sorter:
         self.out.update({n: 0 for n in PLC_INT})
         self.phase = ["idle"] * 4                 # idle / extending / retracting
         self.sorted = [0] * 4
+        self.wait_run = [None] * 5                # since when a motor has been commanded but is not running
+        self.reset_until = [0.0] * 5              # motor trip reset: start command dropped until this time
 
-    def update(self, i: dict) -> dict:
+    def update(self, i: dict, now: float | None = None) -> dict:
+        now = time.monotonic() if now is None else now
         o = self.out
         for n in range(1, 6):
-            o["T_YH1%d" % n] = True
             o["T_YR1%d" % n] = self.speed[n - 1]
+            # a motor that does not report 'running' for > 1 s has tripped: drop the start command briefly to reset it
+            if now < self.reset_until[n - 1]:
+                o["T_YH1%d" % n] = False
+                continue
+            o["T_YH1%d" % n] = True
+            if i["T_XGH1%d" % n]:
+                self.wait_run[n - 1] = None
+            elif self.wait_run[n - 1] is None:
+                self.wait_run[n - 1] = now
+            elif now - self.wait_run[n - 1] > 1.0:
+                self.wait_run[n - 1] = None
+                self.reset_until[n - 1] = now + 0.3
+                o["T_YH1%d" % n] = False
         # new item at the detector (rising edge of the identification word)
         xcq = int(i["T_XCQ"])
         if xcq and not self.prev_xcq:

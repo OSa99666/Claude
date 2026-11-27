@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import math
+import re
 import socket
 import time
 
@@ -31,6 +32,11 @@ def _num(d, key, default):
     return v if math.isfinite(v) else default
 
 
+def _parse_seq(text: str) -> list:
+    """'1,2,3,4,5' (any separators) -> item types 1..5; other characters are ignored."""
+    return [int(x) for x in re.findall(r"[1-5]", text)]
+
+
 def _flags(d, key, n, default):
     v = d.get(key)
     if isinstance(v, list) and len(v) == n:
@@ -43,6 +49,17 @@ class Simulator:
         self.cfg = cfg
         self.pef = Pef.from_cfg(cfg)
         self.model = Transport(self.pef, cfg["sim"].get("random_seed", 0))
+        fd, ft = cfg.get("feed", {}), cfg.get("faults", {})
+        self.model.feed.rate_per_min = float(fd.get("rate_per_min", 0.0))
+        seq = _parse_seq(str(fd.get("sequence", "")))
+        if seq:
+            self.model.feed.seq, self.model.feed.seq_on = seq, True
+        fa = self.model.fault
+        fa.ej_jam_prob = float(ft.get("ejector_jam_probability", 0.0))
+        fa.ej_jam_s = float(ft.get("ejector_jam_s", 3.0))
+        fa.dropout_per_min = float(ft.get("sensor_dropouts_per_min", 0.0))
+        fa.dropout_s = float(ft.get("sensor_dropout_s", 0.4))
+        fa.trip_per_min = float(ft.get("conveyor_trips_per_min", 0.0))
         self.server = SimServer(cfg)
         self.ui: UiLink | None = None
         self.cycle = cfg["sim"]["cycle_ms"] / 1000.0
@@ -83,6 +100,17 @@ class Simulator:
                 p.period_min[n], p.period_max[n] = lo, hi
             p.anim_ticks = int(max(1, min(10, _num(u, "anim_ticks", p.anim_ticks))))
             m.apply_params()
+            fd, fa = m.feed, m.fault
+            fd.seq_on = bool(u.get("feed_pattern_on", fd.seq_on))
+            seq = _parse_seq(str(u.get("feed_pattern", "")))
+            if seq:
+                fd.seq = seq
+            fd.rate_per_min = max(0.0, _num(u, "feed_rate", fd.rate_per_min))
+            fa.ej_jam_prob = max(0.0, min(1.0, _num(u, "f_jam_pct", fa.ej_jam_prob * 100.0) / 100.0))
+            fa.ej_jam_s = max(0.0, _num(u, "f_jam_s", fa.ej_jam_s))
+            fa.dropout_per_min = max(0.0, _num(u, "f_drop_per_min", fa.dropout_per_min))
+            fa.dropout_s = max(0.0, _num(u, "f_drop_s", fa.dropout_s))
+            fa.trip_per_min = max(0.0, _num(u, "f_trip_per_min", fa.trip_per_min))
         if self.ui:
             if self.ui.take("feed_single_seq"):
                 m.feed_single()
@@ -94,6 +122,19 @@ class Simulator:
                     m.empty_store(n)
             if self.ui.take("enter_store1_seq"):
                 m.enter_store1_item5()
+            if self.ui.take("restart_feed_seq"):
+                m.reseed(int(_num(u, "feed_seed", m.seed)))
+                log.info("item sequence restarted (seed %d)", m.seed)
+            if self.ui.take("reset_stats_seq"):
+                m.reset_stats()
+            for n in range(1, 6):
+                if self.ui.take("trip%d_seq" % n):
+                    m.trip(n)
+            for k in range(1, 5):
+                if self.ui.take("jam%d_seq" % k):
+                    m.jam_next_stroke(k)
+            if self.ui.take("drop_all_seq"):
+                m.drop_out_all_sensors()
 
     def params_for_ui(self) -> dict:
         p, f = self.pef, self.model.f
@@ -103,7 +144,13 @@ class Simulator:
                 "period_max_ms": p.period_max[0] * 1000, "anim_ticks": p.anim_ticks,
                 "force_stop_motor": f.fsl_motor, "force_extend": f.fsh_ej, "force_retract": f.fsl_ej,
                 "force_fb_true": f.fh_ej, "force_fb_false": f.fl_ej,
-                "force_front_true": f.fh_det, "force_front_false": f.fl_det}
+                "force_front_true": f.fh_det, "force_front_false": f.fl_det,
+                "feed_pattern_on": self.model.feed.seq_on,
+                "feed_pattern": ",".join(str(x) for x in self.model.feed.seq),
+                "feed_rate": self.model.feed.rate_per_min, "feed_seed": self.model.seed,
+                "f_jam_pct": self.model.fault.ej_jam_prob * 100.0, "f_jam_s": self.model.fault.ej_jam_s,
+                "f_drop_per_min": self.model.fault.dropout_per_min, "f_drop_s": self.model.fault.dropout_s,
+                "f_trip_per_min": self.model.fault.trip_per_min}
 
     def send_visual(self):
         if not self.udp:
@@ -118,6 +165,7 @@ class Simulator:
                "vel": [round(v, 2) for v in m.vel],
                "ej_pos": [round(e.pos, 3) for e in m.ejectors],
                "plc": self.clients > 0, "clients": self.clients,
+               "stats": m.stats_state(), "faults": m.faults_state(),
                "io": self.io, "cmd": self.cmd_in, "params": self.params_for_ui()}
         try:
             self.udp.sendto(json.dumps(msg).encode(), self.udp_addr)

@@ -17,7 +17,7 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
   untreated type 5, which has no detector bit and runs to store 1 - intended); all detectors/motors show the metal
   colour (`METAL`) when off; ejector rod (round, cylinder) and housing are 0.5 m so the piston stays inside when extended; pusher plate (rounded corners, generated mesh `_rounded_plate_mesh`) has the rod's metal colour.
 - Not verified: the real PLC link / CODESYS program for this simulation; `ejector_travel_to_end` assumed true.
-- Tests: `python -m pytest -q` in `transport-sim` (8 pass).  Never put passwords/tokens in the repo.
+- Tests: `python -m pytest -q` in `transport-sim` (18 pass).  Never put passwords/tokens in the repo.
 - Motors: running colour = the type-2 item green (`_tc(2)`), metal when stopped.
 - View (latest): hopper + ramp at the T1 start (visual-only mapping of the first item length), items tip into open bins at the
   belt ends (the sim sends `store_in` arrival counters + `colours`; Godot animates the fall), item/lamp colours come from the
@@ -29,3 +29,8 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
 - CODESYS: subscription time must match the DatasourcesTasks cycle (40 ms needs 10 ms) or the DSM falls back to 1000 ms (see ballplate-sim/CLAUDE.md).
 - LEDs (like the valve): per motor command + running LED sitting directly on top of the motor, per ejector 2x2 LEDs directly on the housing at its back end (commands row, feedbacks row), green = High, yellow = Low, metal = off;
   `_led_node/_led/_caption/_add_motor_leds/_add_ejector_leds` in `godot/main.gd`.  Not run in Godot - user checks.
+- Test aids (user-requested): fixed item sequence / seed / feed rate (`Transport.feed`, `reseed`), scoreboard (`stats`, type k -> store k+1,
+  type 5 -> store 1; `_to_store` counts), faults (`Transport.fault`: ejector jams, sensor dropouts, motor trips latched until the PLC drops T_YH1n;
+  own RNG `frng`).  UI keys: feed_pattern(_on), feed_seed, feed_rate, f_*; one-shot seq keys restart_feed_seq, reset_stats_seq, tripN_seq,
+  jamN_seq, drop_all_seq.  Mock PLC resets a tripped motor (drops T_YH1n for 0.3 s when a commanded motor is not running for > 1 s).
+  Godot: LineEdit support in the panel, Faults tab, scoreboard + faults in the HUD.  Tests: 18 pass.  Godot part not run - user checks.

@@ -129,9 +129,144 @@ def test_no_overlap_when_stack_is_released_early():
     plc = Sorter()
     for _ in range(round(90 / 0.005)):
         io = {"T_" + k: v for k, v in m.outputs().items()}
-        o = plc.update(io)
+        o = plc.update(io, m.time)
         m.cmd = dict(yh=[o["T_YH1%d" % n] for n in range(1, 6)], yr=[o["T_YR1%d" % n] for n in range(1, 6)],
                      ej_yh=[o["T_YH2%d" % n] for n in range(1, 5)], ej_yl=[o["T_YL2%d" % n] for n in range(1, 5)])
         m.step(0.005)
         ps = sorted(i.pos for i in m.t1)
         assert all(b - a > 59 for a, b in zip(ps, ps[1:]))
+
+
+# ---------------------------------------------------------------- feed: sequence, rate, seed
+def types_fed(m, secs, dt=0.005):
+    seen = []
+    known = {}                                       # keeps the items alive so their ids are not reused
+    for _ in range(round(secs / dt)):
+        m.step(dt)
+        for it in m.t1:
+            if id(it) not in known:
+                known[id(it)] = it
+                seen.append(it.id)
+    return seen
+
+
+def test_fixed_sequence_repeats():
+    m = make()
+    m.feed.seq_on, m.feed.seq = True, [3, 1, 5, 2]
+    start_all(m)
+    seen = types_fed(m, 14.0)
+    assert len(seen) >= 6
+    assert seen[:8] == ([3, 1, 5, 2] * 2)[:len(seen[:8])]
+    m.reseed(0)
+    assert m.seq_idx == 0
+
+
+def test_same_seed_same_random_sequence():
+    a, b = make(seed=42), make(seed=42)
+    start_all(a)
+    start_all(b)
+    assert types_fed(a, 15.0) == types_fed(b, 15.0)
+
+
+def test_feed_rate_limits_entries():
+    m = make()
+    m.feed.rate_per_min = 20.0                              # one item every 3 s
+    start_all(m)
+    n = len(types_fed(m, 30.0))
+    assert 9 <= n <= 11
+
+
+# ---------------------------------------------------------------- statistics
+def test_statistics_correct_and_wrong():
+    m = make()
+    m._to_store(2, 2)        # type 2 into store 3 (index 2) - correct
+    m._to_store(0, 5)        # untreated into store 1 - correct
+    m._to_store(0, 3)        # type 3 reaches the end of T1 - wrong (missed)
+    m._to_store(1, 4)        # type 4 in the wrong side store - wrong
+    s = m.stats_state()
+    assert (s["correct"], s["wrong"]) == (2, 2) and s["arrived"][0] == 2
+    assert s["last_wrong"] == "type 4 in store 2"
+    m.reset_stats()
+    assert m.stats_state()["correct"] == 0
+
+
+# ---------------------------------------------------------------- faults
+def test_conveyor_trip_latches_until_start_dropped():
+    m = make()
+    m.f.xe = False
+    start_all(m)
+    run(m, 0.3)
+    assert m.outputs()["XGH12"]
+    m.trip(2)
+    run(m, 0.05)
+    assert not m.outputs()["XGH12"] and m.vel[1] == 0.0
+    run(m, 1.0)
+    assert not m.outputs()["XGH12"]                         # still tripped: start command is still on
+    m.cmd["yh"][1] = False
+    run(m, 0.05)
+    m.cmd["yh"][1] = True
+    run(m, 0.3)
+    assert m.outputs()["XGH12"]                             # restarted after the PLC reset the command
+
+
+def test_jam_next_stroke_freezes_ejector_and_skips_item():
+    from transportsim.transport import Item
+    m = make()
+    m.f.xe = False
+    m.fault.ej_jam_s = 2.0
+    start_all(m)
+    run(m, 0.3)
+    m.t1.append(Item(1, m.ej_pos(0) - m.r - 10.0))          # an item right in front of ejector 1
+    m.jam_next_stroke(1)
+    m.cmd["ej_yh"][0] = True
+    run(m, 1.0)
+    assert not m.ejectors[0].at_high and not m.ejectors[0].at_low     # frozen half way
+    assert len(m.t1) == 1 and m.side[0] == []                          # nothing was pushed
+    run(m, 2.0)
+    assert m.ejectors[0].at_high                                       # recovers after the jam duration
+
+
+def test_sensor_dropout_hides_detector_and_front_sensors():
+    from transportsim.transport import Item
+    m = make()
+    m.f.xe = False
+    m.fault.dropout_s = 0.5
+    start_all(m)
+    run(m, 0.3)
+    m.t1.append(Item(2, m.det_pos()))                       # centred on the detector
+    run(m, 0.05)
+    assert m.outputs()["XCQ02"] and m.outputs()["XCQ"] == COLOURS[2]
+    m.drop_out_all_sensors()
+    run(m, 0.05)
+    o = m.outputs()
+    assert not o["XCQ02"] and o["XCQ"] == 0
+    run(m, 0.7)
+    assert not m.drop_until[0] > m.time
+
+
+def test_random_faults_off_by_default_and_on_when_set():
+    m = make(seed=5)
+    start_all(m)
+    run(m, 20.0)
+    assert not any(m.tripped)
+    m2 = make(seed=5)
+    m2.fault.trip_per_min = 600.0                           # ~10 per second: certain within a second
+    start_all(m2)
+    run(m2, 2.0)
+    assert any(m2.tripped)
+
+
+def test_mock_sorter_recovers_from_trips_and_jams():
+    m = make(seed=3)
+    m.fault.trip_per_min = 2.0
+    m.fault.ej_jam_prob = 0.3
+    m.fault.ej_jam_s = 1.5
+    plc = Sorter()
+    for _ in range(round(150 / 0.005)):
+        io = {"T_" + k: v for k, v in m.outputs().items()}
+        o = plc.update(io, m.time)
+        m.cmd = dict(yh=[o["T_YH1%d" % n] for n in range(1, 6)], yr=[o["T_YR1%d" % n] for n in range(1, 6)],
+                     ej_yh=[o["T_YH2%d" % n] for n in range(1, 5)], ej_yl=[o["T_YL2%d" % n] for n in range(1, 5)])
+        m.step(0.005)
+    s = m.stats_state()
+    assert s["fed"] > 20 and s["correct"] + s["wrong"] > 10      # the line keeps running despite the faults

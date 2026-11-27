@@ -77,11 +77,39 @@ class Forces:
     xe01: bool = False                                             # XE01 untreated items allowed
 
 
+@dataclass
+class FeedCfg:
+    """How items are fed onto T1 (UI)."""
+    seq_on: bool = False                                           # fixed repeating item sequence instead of random
+    seq: list = field(default_factory=lambda: [1, 2, 3, 4, 5])
+    rate_per_min: float = 0.0                                      # 0 = as fast as there is room
+
+
+@dataclass
+class FaultCfg:
+    """Random faults (all 0 = off) for testing the PLC's error handling (UI)."""
+    ej_jam_prob: float = 0.0          # probability per ejector stroke that the ejector jams
+    ej_jam_s: float = 3.0             # jam duration
+    dropout_per_min: float = 0.0      # sensor dropouts per minute while a sensor is active
+    dropout_s: float = 0.4            # dropout duration
+    trip_per_min: float = 0.0         # conveyor motor trips per minute (each conveyor)
+
+
 class Transport:
     def __init__(self, pef: Pef | None = None, seed: int = 0):
         self.pef = pef or Pef()
-        self.rng = random.Random(seed or None)
         self.f = Forces()
+        self.feed = FeedCfg()
+        self.fault = FaultCfg()
+        self.time = 0.0
+        self.seq_idx = 0
+        self.last_entry = -1e9
+        self.tripped = [False] * 5                                  # motor trip, latched until the PLC drops T_YH1n
+        self.jam_until = [0.0] * 4                                  # ejector jammed (frozen) until this time
+        self.jam_next = [False] * 4                                 # jam the next stroke of this ejector
+        self.drop_until = [0.0] * 5                                 # sensor dropout: detector, front sensors 1..4
+        self.reseed(seed)
+        self.reset_stats()
         self.t1: list[Item] = []
         self.side: list[list[Item]] = [[] for _ in range(4)]       # side[k] = conveyor T(k+2), newest first
         self.store: list[int] = [0] * 5                             # item id in store n (0 = empty)
@@ -95,7 +123,30 @@ class Transport:
         self.det = [False] * 4
         self.xcq = 0
         self.front = [False] * 4
+        self.dt_last = 0.01
         self.apply_params()
+
+    # ------------------------------------------------------------------ seed / statistics / fault triggers
+    def reseed(self, seed: int = 0):
+        """(Re)start the item sequence: fixed seed (0 = random) and the fixed pattern from its beginning.
+        Faults use their own generator, so they never change the item sequence."""
+        self.seed = int(seed)
+        self.rng = random.Random(self.seed or None)
+        self.frng = random.Random((self.seed + 7919) if self.seed else None)
+        self.seq_idx = 0
+
+    def reset_stats(self):
+        self.stats = {"fed": 0, "correct": 0, "wrong": 0, "arrived": [0] * 5, "last_wrong": ""}
+
+    def trip(self, n: int):
+        """Trip conveyor motor n (1..5): it stops until the PLC drops and sets its start command again."""
+        self.tripped[n - 1] = True
+
+    def jam_next_stroke(self, k: int):
+        self.jam_next[k - 1] = True
+
+    def drop_out_all_sensors(self):
+        self.drop_until = [self.time + self.fault.dropout_s] * 5
 
     # ------------------------------------------------------------------ geometry
     @property
@@ -149,14 +200,31 @@ class Transport:
 
     # ------------------------------------------------------------------ step
     def step(self, dt: float):
-        c, f, p = self.cmd, self.f, self.pef
+        c, f, p, fa = self.cmd, self.f, self.pef, self.fault
+        self.time += dt
+        self.dt_last = dt
         # equipment emulators (motors: start delay, stop delay; ejectors: stroke + action delays)
         for i, m in enumerate(self.motors):
+            if self.tripped[i] and not c["yh"][i]:
+                self.tripped[i] = False                              # the PLC dropped the start command: trip reset
+            elif (not self.tripped[i] and m.at_high and fa.trip_per_min > 0
+                    and self.frng.random() < fa.trip_per_min / 60.0 * dt):
+                self.tripped[i] = True                               # random motor trip while running
+            start = c["yh"][i] and not f.fsl_motor[i] and not self.tripped[i]
             m.p.safeguard_low = f.fsl_motor[i]
-            m.step(dt, c["yh"][i] and not f.fsl_motor[i], not (c["yh"][i] and not f.fsl_motor[i]))
+            m.step(dt, start, not start)
         for k, e in enumerate(self.ejectors):
             e.p.safeguard_high, e.p.safeguard_low = f.fsh_ej[k], f.fsl_ej[k]
+            if self.jam_until[k] > self.time:                        # jammed: frozen where it is
+                e.left_low = False
+                continue
+            before = e.pos
             e.step(dt, c["ej_yh"][k] and not f.fsh_ej[k], c["ej_yl"][k] and not f.fsl_ej[k])
+            started = (before <= 0.0 < e.pos) or (before >= 1.0 > e.pos)       # a stroke has just begun
+            if started and (self.jam_next[k] or self.frng.random() < fa.ej_jam_prob):
+                self.jam_next[k] = False
+                self.jam_until[k] = self.time + fa.ej_jam_s
+                e.left_low = False                                   # jammed before it could push the item
         run = [m.at_high for m in self.motors]
         ticks = max(1, min(MAX_ANIM_TICKS, p.anim_ticks))
         self.vel = [ticks / self.period(n, c["yr"][n]) if run[n] else 0.0 for n in range(5)]
@@ -173,6 +241,13 @@ class Transport:
     def _to_store(self, n: int, item_id: int):
         self.store[n] = item_id
         self.store_in[n] += 1
+        st = self.stats
+        st["arrived"][n] += 1
+        if n == item_id % 5:                                         # type k belongs in store k+1 (type 5 -> store 1)
+            st["correct"] += 1
+        else:
+            st["wrong"] += 1
+            st["last_wrong"] = "type %d in store %d" % (item_id, n + 1)
 
     # ---- T1
     def _move_t1(self, dt, running, ticks):
@@ -210,21 +285,29 @@ class Transport:
             if it.pos <= min_sp:
                 min_sp = it.pos
         enable = len(self.t1) < p.t1_max_items and min_sp > p.tpi + p.spacing
-        if enable and (self.f.xe or self.xes):
+        rate = self.feed.rate_per_min
+        rate_ok = rate <= 0 or self.time - self.last_entry >= 60.0 / rate
+        if enable and ((self.f.xe and rate_ok) or self.xes):
             self.xes = False
-            x = self.rng.random()
-            if x > 0.80:
-                iid = 4
-            elif x > 0.60:
-                iid = 3
-            elif x > 0.40:
-                iid = 2
-            elif x > 0.20:
-                iid = 1
-            elif self.f.xe01:
-                iid = 5                                # 'untreated item' can be blocked
+            if self.feed.seq_on and self.feed.seq:
+                iid = self.feed.seq[self.seq_idx % len(self.feed.seq)]
+                self.seq_idx += 1
             else:
-                iid = 1
+                x = self.rng.random()
+                if x > 0.80:
+                    iid = 4
+                elif x > 0.60:
+                    iid = 3
+                elif x > 0.40:
+                    iid = 2
+                elif x > 0.20:
+                    iid = 1
+                elif self.f.xe01:
+                    iid = 5                            # 'untreated item' can be blocked
+                else:
+                    iid = 1
+            self.last_entry = self.time
+            self.stats["fed"] += 1
             self.t1.insert(0, Item(iid, 0.0))
 
     # ---- T2..T5
@@ -258,6 +341,18 @@ class Transport:
             for k in range(4):
                 if abs(c - self.ej_pos(k)) <= r:
                     self.front[k] = True
+        # random / triggered sensor dropouts: an active sensor reads false for a short time
+        fa = self.fault
+        active = [any(self.det) or self.xcq != 0] + list(self.front)
+        for i in range(5):
+            if active[i] and fa.dropout_per_min > 0 and self.frng.random() < fa.dropout_per_min / 60.0 * self.dt_last:
+                self.drop_until[i] = self.time + fa.dropout_s
+        if self.drop_until[0] > self.time:
+            self.det = [False] * 4
+            self.xcq = 0
+        for k in range(4):
+            if self.drop_until[k + 1] > self.time:
+                self.front[k] = False
 
     # ---- sorting onto T(k+2)
     def _eject(self, k):
@@ -274,6 +369,16 @@ class Transport:
             for j in range(1, len(side)):                       # prevent overlapping items
                 if abs(side[j].pos - side[j - 1].pos) < p.tpi:
                     side[j].pos = side[j - 1].pos + p.tpi
+
+    def faults_state(self) -> dict:
+        t = self.time
+        return {"trip": list(self.tripped), "jam": [round(max(0.0, u - t), 1) for u in self.jam_until],
+                "drop": [u > t for u in self.drop_until], "jam_next": list(self.jam_next)}
+
+    def stats_state(self) -> dict:
+        st = self.stats
+        return {"fed": st["fed"], "correct": st["correct"], "wrong": st["wrong"], "arrived": list(st["arrived"]),
+                "last_wrong": st["last_wrong"], "in_transit": len(self.t1) + sum(len(x) for x in self.side)}
 
     # ------------------------------------------------------------------ outputs (names as the PLC IO)
     def outputs(self) -> dict:

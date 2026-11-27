@@ -97,3 +97,24 @@ async def scenario():
 
 def test_round_trip():
     asyncio.run(scenario())
+
+
+def test_ui_commands_reach_the_model():
+    """UI values (feed pattern, faults, buttons) are applied by Simulator.apply_ui without a server."""
+    from transportsim.ui_link import UiLink
+    cfg = config.load()
+    cfg["visual"].update(enabled=False)
+    sim = Simulator(cfg)
+    sim.ui = UiLink()
+    sim.ui.latest = {"feed_pattern_on": True, "feed_pattern": "4, 4,2", "feed_rate": 12.0, "f_jam_pct": 25.0,
+                     "f_trip_per_min": 3.0, "feed_seed": 7, "trip3_seq": 0, "jam2_seq": 0}
+    sim.apply_ui()
+    m = sim.model
+    assert m.feed.seq_on and m.feed.seq == [4, 4, 2] and m.feed.rate_per_min == 12.0
+    assert abs(m.fault.ej_jam_prob - 0.25) < 1e-9 and m.fault.trip_per_min == 3.0
+    sim.ui.latest = dict(sim.ui.latest, trip3_seq=1, jam2_seq=1, restart_feed_seq=0)
+    sim.ui.datagram_received(json.dumps(sim.ui.latest).encode(), None)     # registers the baseline counters
+    sim.ui.latest = dict(sim.ui.latest, trip3_seq=2, jam2_seq=2, restart_feed_seq=1)
+    sim.ui.datagram_received(json.dumps(sim.ui.latest).encode(), None)
+    sim.apply_ui()
+    assert m.tripped[2] and m.jam_next[1] and m.seed == 7
