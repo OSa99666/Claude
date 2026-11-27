@@ -38,8 +38,11 @@ var out_disc := Node3D.new()
 var out_lever := Node3D.new()
 var lamp_h := MeshInstance3D.new()
 var lamp_l := MeshInstance3D.new()
+var lamp_hh := MeshInstance3D.new()
 var lab_h := Label3D.new()
 var lab_l := Label3D.new()
+var lab_hh := Label3D.new()
+var out_water: MeshInstance3D             # dark blue water upstream of the outlet valve disc
 var streams: Array[Dictionary] = []
 var cam := Camera3D.new()
 
@@ -70,6 +73,7 @@ const LEVER := Color8(0x65, 0x00, 0x00)         # dark red
 const PARTICLE := Color(0.55, 0.65, 0.85)
 const LED_HIGH := Color8(0x00, 0x65, 0x00)      # dark green
 const LED_LOW := Color8(0x65, 0x65, 0x00)       # dark yellow
+const LED_HH := Color8(0x65, 0x00, 0x00)        # dark red
 
 var yaw := 0.5
 var pitch := 0.25
@@ -212,13 +216,14 @@ func _valve(x: float, y: float, disc: Node3D, lever: Node3D, steel: Material) ->
 
 
 ## Steel pipe x0..x1 along X with a transparent window (glass) around the valve at xv, so the disc can be seen.
-## The flow particles show through the window.
-func _pipe_with_window(x0: float, x1: float, xv: float, y: float, steel: Material, glass: Material) -> void:
+## Dark blue water fills the window upstream of the disc (x < xv); the flow particles show through the window.
+func _pipe_with_window(x0: float, x1: float, xv: float, y: float, steel: Material, glass: Material) -> MeshInstance3D:
 	var wa := xv - 0.28
 	var wb := xv + 0.28
 	_cyl(0.12, wa - x0, Vector3((x0 + wa) / 2.0, y, 0), steel, Vector3(0, 0, 90))
 	_cyl(0.12, x1 - wb, Vector3((wb + x1) / 2.0, y, 0), steel, Vector3(0, 0, 90))
 	_cyl(0.12, wb - wa, Vector3(xv, y, 0), glass, Vector3(0, 0, 90))
+	return _cyl(0.1, xv - 0.02 - wa, Vector3((wa + xv - 0.02) / 2.0, y, 0), _mat(WATER), Vector3(0, 0, 90))
 
 
 func _build_plant() -> void:
@@ -265,7 +270,7 @@ func _build_plant() -> void:
 	add_child(elbow)
 	# outlet pipe (bottom right)
 	var out_len := PIPE_X1 - VESSEL_R
-	_pipe_with_window(VESSEL_R, PIPE_X1, 2.0, OUT_Y, steel, pipe_glass)
+	out_water = _pipe_with_window(VESSEL_R, PIPE_X1, 2.0, OUT_Y, steel, pipe_glass)
 	_valve(-2.0, IN_Y, in_disc, in_lever, steel)
 	_valve(2.0, OUT_Y, out_disc, out_lever, steel)
 	_label3d("T_FCV10", Vector3(-2.0, IN_Y + 1.05, 0.0))
@@ -300,7 +305,7 @@ func _build_plant() -> void:
 	_make_stream(IN_Y, PIPE_X0, IN_END_X, 60)
 	_make_stream(OUT_Y, VESSEL_R, PIPE_X1, 60)
 	# level switch lamps on the front of the vessel wall
-	for item in [[lamp_h, lab_h, "T_LSH10"], [lamp_l, lab_l, "T_LSL10"]]:
+	for item in [[lamp_h, lab_h, "T_LSH10"], [lamp_l, lab_l, "T_LSL10"], [lamp_hh, lab_hh, "T_LSHH10"]]:
 		var lamp: MeshInstance3D = item[0]
 		var lm := SphereMesh.new()
 		lm.radius = 0.07
@@ -350,7 +355,7 @@ func _scope_draw() -> void:
 	var p: Dictionary = msg.get("params", {})
 	var t_now := float(h_t[h_t.size() - 1])
 	# switch marks
-	for item in [["h_high", Color(0.55, 0.15, 0.15)], ["h_low", Color(0.6, 0.6, 0.15)]]:
+	for item in [["h_high", Color(0.55, 0.15, 0.15)], ["h_hh", Color(0.75, 0.2, 0.2)], ["h_low", Color(0.6, 0.6, 0.15)]]:
 		var key: String = item[0]
 		var col: Color = item[1]
 		var yv := mt + hh * (1.0 - float(p.get(key, 0.0)) / 100.0)
@@ -438,6 +443,7 @@ func _build_panel(layer: CanvasLayer) -> void:
 	_spin(box, "   gain [%]", 0.0, 50.0, 0.1, "noise_gain")
 	_heading(box, "Level switches")
 	_spin(box, "T_LSH10 high mark [%]", 0.0, 100.0, 1.0, "h_high")
+	_spin(box, "T_LSHH10 high-high mark [%]", 0.0, 100.0, 1.0, "h_hh")
 	_spin(box, "T_LSL10 low mark [%]", 0.0, 100.0, 1.0, "h_low")
 	_spin(box, "Hysteresis [%]", 0.0, 50.0, 0.5, "hysteresis")
 	_check(box, "T_LSL10 true while level ABOVE the low mark", "lsl_inverted")
@@ -595,7 +601,8 @@ func _process(delta: float) -> void:
 	in_lever.rotation_degrees = in_disc.rotation_degrees
 	out_disc.rotation_degrees = Vector3(0, 90.0 * clampf(q_out / 100.0, 0.0, 1.0), 0)
 	out_lever.rotation_degrees = out_disc.rotation_degrees
-	# flow
+	# flow (the outlet side is only wet while there is liquid in the vessel)
+	out_water.visible = h > 0.5
 	_move_stream(streams[0], q_in, delta)
 	_move_stream(streams[1], q_out if h > 0.5 else 0.0, delta)
 	var surface := VESSEL_Y0 + lh
@@ -621,18 +628,22 @@ func _process(delta: float) -> void:
 	# level switch lamps follow the configured marks
 	var yh := VESSEL_Y0 + VESSEL_H * float(p.get("h_high", 80.0)) / 100.0
 	var yl := VESSEL_Y0 + VESSEL_H * float(p.get("h_low", 20.0)) / 100.0
+	var yhh := VESSEL_Y0 + VESSEL_H * float(p.get("h_hh", 95.0)) / 100.0
 	var zf := VESSEL_R + 0.04
 	lamp_h.position = Vector3(0.35, yh, sqrt(maxf(zf * zf - 0.35 * 0.35, 0.0)))
 	lamp_l.position = Vector3(0.35, yl, sqrt(maxf(zf * zf - 0.35 * 0.35, 0.0)))
+	lamp_hh.position = Vector3(0.35, yhh, sqrt(maxf(zf * zf - 0.35 * 0.35, 0.0)))
 	lab_h.position = lamp_h.position + Vector3(0.15, 0, 0.1)
 	lab_l.position = lamp_l.position + Vector3(0.15, 0, 0.1)
+	lab_hh.position = lamp_hh.position + Vector3(0.15, 0, 0.1)
 	_led(lamp_h, bool(msg["lsh"]), LED_HIGH)
 	_led(lamp_l, bool(msg["lsl"]), LED_LOW)
+	_led(lamp_hh, bool(msg["lshh"]), LED_HH)
 
 	var src := "manual override" if bool(msg.get("manual", false)) else ("PLC" if bool(msg.get("plc", false)) else "no PLC - valve closed")
-	hud.text = "level %5.1f %%   (T_LT10 = %d,  true %.1f %%)\nvalve %5.1f %%   (T_FCV10 = %d)  [%s]\ninflow %5.1f %%   outflow %5.1f %%\nT_LSH10 %s   T_LSL10 %s      OPC UA clients: %d\n%s\nprocess order %d + dead time %.1f s\npoles: %s" % [
+	hud.text = "level %5.1f %%   (T_LT10 = %d,  true %.1f %%)\nvalve %5.1f %%   (T_FCV10 = %d)  [%s]\ninflow %5.1f %%   outflow %5.1f %%\nT_LSH10 %s  T_LSL10 %s  T_LSHH10 %s     OPC UA clients: %d\n%s\nprocess order %d + dead time %.1f s\npoles: %s" % [
 		float(msg["y"]), int(msg["lt_raw"]), h, u, int(msg["fcv_raw"]), src, q_in, q_out,
-		_lamp(bool(msg["lsh"])), _lamp(bool(msg["lsl"])), int(msg.get("clients", 0)),
+		_lamp(bool(msg["lsh"])), _lamp(bool(msg["lsl"])), _lamp(bool(msg["lshh"])), int(msg.get("clients", 0)),
 		("\nOVERFLOW  %.1f %%/s over the rim   spilled %.0f %%  (Set level resets)" % [q_over, spilled]) if (over or spilled > 0.05) else "\n",
 		int(msg["order"]), float(p.get("delay", 0.0)), ", ".join(PackedStringArray(msg["poles"]))]
 

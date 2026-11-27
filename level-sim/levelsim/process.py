@@ -54,6 +54,7 @@ class Params:
     noise_gain: float = 0.0
     # level switches (true = level REACHED the mark, unless inverted)
     h_high: float = 80.0
+    h_hh: float = 95.0          # T_LSHH10 high-high mark
     h_low: float = 20.0
     hysteresis: float = 2.0
     lsl_inverted: bool = False  # True: T_LSL10 is true while the level is ABOVE the low mark (covered)
@@ -98,6 +99,7 @@ class LevelProcess:
         self.noise_val = 0.0
         self.lsh = False
         self.lsl = False
+        self.lshh = False
         self._cons = BandNoise(self.rng)
         self._noise = BandNoise(self.rng)
         self._ro_f = BandNoise(self.rng)
@@ -162,6 +164,8 @@ class LevelProcess:
             self.lsh = True
         else:
             self.lsh = False
+        # high-high mark (same rule)
+        self.lshh = h >= p.h_hh or (self.lshh and h > p.h_hh - hy)
         # low mark: reached (true) at h <= h_low, released above h_low + hysteresis
         reached = getattr(self, "_low_reached", False)
         if h <= p.h_low:

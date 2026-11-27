@@ -15,7 +15,7 @@ Same pattern as `../ballplate-sim`, `../valve-sim`, `../transport-sim` (read the
 - Mock PLC (`levelsim/mock_plc.py`): `--mode onoff` (valve 60 % / 0 on the switches, limit cycle ~13..87 % with marks 20/80) or `--mode pi`.
 - Godot (`godot/main.gd`): vessel, inlet/outlet pipes + valves, switch lamps, scope (level/valve/setpoint line), scrolling parameter panel,
   camera block identical to the other sims.  WRITTEN WITHOUT RUNNING GODOT - the user checks it.
-- Tests: `python -m pytest -q` in `level-sim` (13 pass).  Never put passwords/tokens in the repo.
+- Tests: `python -m pytest -q` in `level-sim` (14 pass).  Never put passwords/tokens in the repo.
 - Vessel is OPEN at the top (user request): level > 100 % spills (`spilled`, `q_over`, `overflowing` in `process.py`, state keys `q_over/spilled/overflow`); Godot shows a rim ring, wall stream, puddle, HUD line.  Elbow of the inlet pipe closed with a sphere.  Not run in Godot.
-- Overflow Bool `T_LSHH10` (sim->PLC, user request; name chosen by me, follows the T_LSx10 pattern) = `proc.overflowing`.
-- Valves (user request): the pipe has a transparent glass window (0.56 m) around each butterfly valve like in valve-sim, so the disc is visible; disc radius 0.11 fits the 0.12 pipe.  Not run in Godot.
+- `T_LSHH10` (sim->PLC): high-high level switch with its own mark (`h_hh`, config `h_highhigh`, default 95 %, same hysteresis rule, lamp + panel field + scope line in Godot).  It first meant 'overflow'; the user changed it to a level switch (overflow is still shown in HUD/3D and implies LSHH at 100 %).
+- Valves (user request, dark blue water upstream of each disc like valve-sim): the pipe has a transparent glass window (0.56 m) around each butterfly valve like in valve-sim, so the disc is visible; disc radius 0.11 fits the 0.12 pipe.  Not run in Godot.

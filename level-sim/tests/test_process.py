@@ -155,3 +155,16 @@ def test_open_top_overflow():
     assert not p.overflowing and p.h < 100.0
     p.set_level(50.0)
     assert p.spilled == 0.0
+
+
+def test_high_high_switch():
+    p = LevelProcess(Params(h_high=80, h_hh=95, hysteresis=2), level=50)
+    assert not p.lshh
+    p.set_level(90)
+    assert p.lsh and not p.lshh
+    p.set_level(96)
+    assert p.lshh
+    p.set_level(94)
+    assert p.lshh                                                       # inside the hysteresis band
+    p.set_level(92)
+    assert not p.lshh and p.lsh

@@ -56,7 +56,7 @@ async def scenario():
         assert await N("T_LSL10").read_value() is False                 # left the low mark
         await asyncio.sleep(2.5)
         assert await lt() >= 32000 - 100 and await N("T_LSH10").read_value() is True   # full
-        assert await N("T_LSHH10").read_value() is True                                 # still filling: spilling over the rim
+        assert await N("T_LSHH10").read_value() is True                                 # above the high-high mark (95 %)
         await N("T_FCV10").write_value(ua.DataValue(ua.Variant(0, ua.VariantType.Int16)))
         await asyncio.sleep(2.5)                                        # inflow dies away (2nd-order block)
         # UI: manual override and set level

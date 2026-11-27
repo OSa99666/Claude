@@ -29,7 +29,7 @@ FLOAT_KEYS = {"delay": (0.0, 60.0), "t_act": (0.0, 60.0), "fn": (0.005, 5.0), "z
               "rnd_osc_f": (0.0, 5.0), "rnd_osc_gain": (0.0, 100.0),
               "cons_f": (0.0, 20.0), "cons_gain": (0.0, 100.0),
               "noise_f": (0.0, 50.0), "noise_gain": (0.0, 50.0),
-              "h_high": (0.0, 100.0), "h_low": (0.0, 100.0), "hysteresis": (0.0, 50.0)}
+              "h_high": (0.0, 100.0), "h_hh": (0.0, 100.0), "h_low": (0.0, 100.0), "hysteresis": (0.0, 50.0)}
 
 
 def _num(d: dict, key: str, default: float) -> float:
@@ -47,7 +47,7 @@ class Simulator:
         seed = int(cfg["sim"].get("seed", 0)) or None
         self.proc = LevelProcess(Params(
             delay=c["delay_s"], t_act=c["actuator_lag_s"], fn=c["fn_hz"], zeta=c["zeta"], gain=c["gain"],
-            k_acc=c["k_acc"], outlet=c["outlet_pct"], h_high=c["h_high"], h_low=c["h_low"],
+            k_acc=c["k_acc"], outlet=c["outlet_pct"], h_high=c["h_high"], h_hh=c.get("h_highhigh", 95.0), h_low=c["h_low"],
             hysteresis=c["hysteresis"], lsl_inverted=c.get("lsl_inverted", False)),
             level=c["start_level"], seed=seed)
         self.raw_full = float(cfg["scaling"]["raw_full"])
@@ -100,7 +100,7 @@ class Simulator:
         params.update(manual_on=self.manual_on, manual_u=self.manual_u)
         msg = {"t": round(self.t, 3), "h": pr.h, "y": pr.measured, "u": pr.u, "u_delayed": pr.u_delayed,
                "q_in": pr.q_in, "q_out": pr.q_out, "q_over": pr.q_over, "spilled": pr.spilled,
-               "overflow": pr.overflowing, "lsh": pr.lsh, "lsl": pr.lsl,
+               "overflow": pr.overflowing, "lsh": pr.lsh, "lsl": pr.lsl, "lshh": pr.lshh,
                "fcv_raw": self.fcv_raw, "lt_raw": self.lt_raw,
                "plc": self.clients > 0, "clients": self.clients, "manual": self.manual_on,
                "order": pr.order(), "tf": pr.transfer_function(),
@@ -120,7 +120,7 @@ class Simulator:
         self.proc.step(self.cycle, u)
         self.t += self.cycle
         self.lt_raw = self.pct_to_raw(self.proc.measured)
-        await self.server.write_feedbacks(self.lt_raw, self.proc.lsh, self.proc.lsl, self.proc.overflowing)
+        await self.server.write_feedbacks(self.lt_raw, self.proc.lsh, self.proc.lsl, self.proc.lshh)
         self.send_visual()
 
     async def run(self):
@@ -135,8 +135,8 @@ class Simulator:
                 await self.step_cycle()
                 now = time.monotonic()
                 if now - last_log > 2.0:
-                    log.info("t=%6.1fs level=%5.1f%% u=%5.1f%% FCV=%d LT=%d LSH=%d LSL=%d clients=%d%s", self.t,
-                             self.proc.h, self.proc.u, self.fcv_raw, self.lt_raw, self.proc.lsh, self.proc.lsl,
+                    log.info("t=%6.1fs level=%5.1f%% u=%5.1f%% FCV=%d LT=%d LSH=%d LSL=%d LSHH=%d clients=%d%s", self.t,
+                             self.proc.h, self.proc.u, self.fcv_raw, self.lt_raw, self.proc.lsh, self.proc.lsl, self.proc.lshh,
                              self.clients, " (manual)" if self.manual_on else "")
                     last_log = now
                 next_t += self.cycle

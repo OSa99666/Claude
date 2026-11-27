@@ -28,6 +28,7 @@ gain          = 1.0    # static gain of the 2nd-order block
 k_acc         = 0.1    # accumulator reinforcement [1/s]: dh/dt = k_acc * (inflow - outflow)
 outlet_pct    = 30.0   # outlet valve (load) opening
 h_high        = 80.0   # T_LSH10 reached above this level
+h_highhigh    = 95.0   # T_LSHH10 reached above this level
 h_low         = 20.0   # T_LSL10 reached below this level
 hysteresis    = 2.0
 lsl_inverted  = false  # true: T_LSL10 is true while the level is ABOVE the low mark
