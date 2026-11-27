@@ -272,7 +272,7 @@ func _tree(x: float, z: float, k: int) -> void:
 
 
 func _build_scene() -> void:
-	_box(Vector3(400, 0.2, 400), Vector3(0, -0.12, 0), _mat(GRASS), null)
+	_box(Vector3(2 * ROAD_HALF, 0.2, 2 * ROAD_HALF), Vector3(0, -0.12, 0), _mat(GRASS), null)    # green square only as large as the road area
 	var road := _mat(ROAD)
 	_box(Vector3(2 * ROAD_HALF, 0.06, 2 * HALF), Vector3(0, 0.0, 0), road, null)
 	_box(Vector3(2 * HALF, 0.06, 2 * ROAD_HALF), Vector3(0, 0.0, 0), road, null)
