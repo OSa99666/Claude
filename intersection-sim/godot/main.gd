@@ -40,6 +40,8 @@ const SIG_R := Color(0.9, 0.1, 0.1)
 const SIG_Y := Color(1.0, 0.65, 0.0)
 const SIG_G := Color(0.1, 0.85, 0.2)
 const METAL := Color(0.6, 0.63, 0.68)
+const GREENS := [Color(0.2, 0.5, 0.2), Color(0.28, 0.58, 0.25), Color(0.16, 0.42, 0.22)]
+const TREE_OFFSET := 7.5            # distance of the tree rows from the road centre line
 
 var hud := Label.new()
 var fault_box := Label.new()
@@ -250,6 +252,20 @@ func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> vo
 		btn_nodes[group].append(bb)
 
 
+## Tree: trunk and a rounded crown made of two spheres; size and green vary with k
+func _tree(x: float, z: float, k: int) -> void:
+	var root := Node3D.new()
+	root.position = Vector3(x, 0, z)
+	var sc := 0.85 + 0.1 * float((k * 7) % 5)
+	root.scale = Vector3(sc, sc, sc)
+	add_child(root)
+	_cyl(0.18, 2.4, Vector3(0, 1.2, 0), _mat(Color(0.35, 0.24, 0.14)), root)
+	var leaf := _mat(GREENS[k % GREENS.size()])
+	var crown := _sphere(1.5, Vector3(0, 3.6, 0), leaf, root)
+	crown.scale = Vector3(1.0, 1.15, 1.0)
+	_sphere(1.0, Vector3(0.7, 4.4, 0.3), leaf, root)
+
+
 func _build_scene() -> void:
 	_box(Vector3(400, 0.2, 400), Vector3(0, -0.12, 0), _mat(GRASS), null)
 	var road := _mat(ROAD)
@@ -308,6 +324,17 @@ func _build_scene() -> void:
 	crash_ball.add_child(face)
 	crash_ball.visible = false
 	add_child(crash_ball)
+	# avenues: a row of trees on either side of both roads, beyond the signal poles
+	var ts := 16.0
+	var tk := 0
+	while ts < ROAD_HALF - 3.0:
+		for sgn in [-1.0, 1.0]:
+			for side in [-TREE_OFFSET, TREE_OFFSET]:
+				var shift := 4.0 if side > 0.0 else 0.0
+				_tree(float(sgn) * (ts + shift), float(side), tk)         # along the direction-1 road
+				_tree(float(side), float(sgn) * (ts + shift), tk + 3)     # along the direction-2 road
+				tk += 1
+		ts += 8.0
 	for n in LAMP_NAMES:
 		_set_lamp(n, false)
 
