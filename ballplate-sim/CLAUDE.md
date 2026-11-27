@@ -86,3 +86,6 @@ Open ideas only if the user asks: tests/logging for client disconnect/reconnect 
 - CODESYS finding (user, real PLC): subscription time and the DatasourcesTasks cycle must match (40 ms needs a 10 ms task), otherwise the
   Data Source Manager falls back to a 1000 ms update rate.  The reported 'freeze / slow feedback' was this, not the simulator.  Details in
   `ballplate-sim/codesys/README.md`.  The extra diagnostics in sim.log (timing, PLC tilt writes, OPC UA publish stats) stay in as cheap checks.
+- Godot view (latest): base + central pivot post/ball joint + two servos with horn and connecting rod to the plate underside (`_build_mechanism`,
+  `_update_mechanism`); horn angles by two-bar-linkage IK from the plate tilt (rod length stays constant, checked numerically, horn about +-48 deg at
+  +-15 deg tilt).  Visual only.  Not run in Godot - user checks.

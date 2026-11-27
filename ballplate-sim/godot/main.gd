@@ -19,6 +19,13 @@ var cmd := PacketPeerUDP.new()      # sends UI values
 var sim_host := ""
 
 var table := Node3D.new()
+# servo mechanism below the plate: base, central pivot, two servos with horn + connecting rod to the plate
+var mech := Node3D.new()                # static parts (rebuilt with the table)
+var mech_geo := {}                      # D (attachment distance), a (horn length), sy (shaft height), rod (rod length)
+var horn_x := Node3D.new()              # rotating horn of servo X (tilt about the Z axis)
+var horn_y := Node3D.new()              # rotating horn of servo Y (tilt about the X axis)
+var rod_x := MeshInstance3D.new()
+var rod_y := MeshInstance3D.new()
 var ball := MeshInstance3D.new()
 var walls: Array[MeshInstance3D] = []
 var cam := Camera3D.new()
@@ -77,6 +84,7 @@ func _ready() -> void:
 	add_child(sun)
 
 	add_child(table)
+	add_child(mech)
 	add_child(cam)
 	cam.current = true
 
@@ -235,6 +243,7 @@ func _build(L: float, R: float, wh: float, t: float) -> void:
 	for w in walls:
 		table.add_child(w)
 	# centre cross
+	_build_mechanism(L)
 	table.add_child(_box(Vector3(0.2, 0.004, 0.01), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
 	table.add_child(_box(Vector3(0.01, 0.004, 0.2), Vector3(0, 0.002, 0), Color(0.2, 0.2, 0.2)))
 
@@ -247,8 +256,139 @@ func _build(L: float, R: float, wh: float, t: float) -> void:
 		table.add_child(ball)
 	ball.position = Vector3(0, R, 0)
 	dist = 2.4 * L
+	target = Vector3(0, -0.12 * L, 0)         # a little lower, so the mechanism below the plate is in view
 	_update_camera()
 	_save_home()
+
+
+# ------------------------------------------------------------ servo mechanism
+const MECH_BASE := Color(0.22, 0.23, 0.26)
+const MECH_SERVO := Color(0.25, 0.3, 0.4)
+const MECH_METAL := Color(0.6, 0.63, 0.68)
+const MECH_ROD := Color(0.8, 0.8, 0.85)
+const MECH_HORN := Color8(0x65, 0x65, 0x00)        # dark yellow, as the other simulations
+const MECH_JOINT := Color8(0x65, 0x00, 0x00)       # dark red
+
+
+func _cyl_node(radius: float, height: float, pos: Vector3, color: Color, rot_deg := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = radius
+	cm.bottom_radius = radius
+	cm.height = height
+	mi.mesh = cm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.6
+	mat.metallic = 0.3
+	mi.material_override = mat
+	mi.position = pos
+	mi.rotation_degrees = rot_deg
+	return mi
+
+
+func _ball_node(radius: float, pos: Vector3, color: Color) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = radius
+	sm.height = 2.0 * radius
+	mi.mesh = sm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.5
+	mi.material_override = mat
+	mi.position = pos
+	return mi
+
+
+## Base with two servos, a central pivot post with a ball joint under the plate centre, and for each axis a servo horn
+## and a connecting rod to the underside of the plate.  The horn angles follow from the plate tilt (two-bar linkage),
+## so the servos visibly tilt the plate.  Dimensions scale with the plate size L.
+func _build_mechanism(L: float) -> void:
+	for c in mech.get_children():
+		c.queue_free()
+	horn_x = Node3D.new()
+	horn_y = Node3D.new()
+	rod_x = MeshInstance3D.new()
+	rod_y = MeshInstance3D.new()
+	var d := 0.35 * L                      # distance of the rod attachments from the plate centre
+	var a := 0.125 * L                     # horn length
+	var base_top := -0.45 * L              # top of the base plate below the plate
+	var sy := -0.275 * L                   # height of the servo shafts
+	var attach_y := -0.04                  # underside of the plate
+	mech_geo = {"D": d, "a": a, "sy": sy, "rod": attach_y - sy}
+	# base plate and central pivot post with a ball joint just under the plate centre
+	mech.add_child(_box(Vector3(0.9 * L, 0.06, 0.9 * L), Vector3(0, base_top - 0.03, 0), MECH_BASE))
+	mech.add_child(_cyl_node(0.06, base_top * -1.0 - 0.05, Vector3(0, (base_top - 0.05) / 2.0, 0), MECH_METAL))
+	mech.add_child(_ball_node(0.05, Vector3(0, -0.045, 0), MECH_METAL))
+	# servo X (shaft along Z, at +x side), horn swings in the x-y plane
+	var colh := sy - 0.085 - base_top       # column from the base up to the servo case
+	mech.add_child(_box(Vector3(0.2, 0.17, 0.14), Vector3(d - a, sy, -0.07), MECH_SERVO))
+	mech.add_child(_box(Vector3(0.12, colh, 0.1), Vector3(d - a, base_top + colh / 2.0, -0.07), MECH_BASE))
+	horn_x.position = Vector3(d - a, sy, 0)
+	mech.add_child(horn_x)
+	horn_x.add_child(_cyl_node(0.04, 0.045, Vector3.ZERO, MECH_METAL, Vector3(90, 0, 0)))
+	horn_x.add_child(_box(Vector3(a + 0.04, 0.035, 0.035), Vector3(a / 2.0, 0, 0), MECH_HORN))
+	horn_x.add_child(_ball_node(0.026, Vector3(a, 0, 0), MECH_JOINT))
+	# servo Y (shaft along X, at +z side), horn swings in the z-y plane
+	mech.add_child(_box(Vector3(0.14, 0.17, 0.2), Vector3(-0.07, sy, d - a), MECH_SERVO))
+	mech.add_child(_box(Vector3(0.1, colh, 0.12), Vector3(-0.07, base_top + colh / 2.0, d - a), MECH_BASE))
+	horn_y.position = Vector3(0, sy, d - a)
+	mech.add_child(horn_y)
+	horn_y.add_child(_cyl_node(0.04, 0.045, Vector3.ZERO, MECH_METAL, Vector3(0, 0, 90)))
+	horn_y.add_child(_box(Vector3(0.035, 0.035, a + 0.04), Vector3(0, 0, a / 2.0), MECH_HORN))
+	horn_y.add_child(_ball_node(0.026, Vector3(0, 0, a), MECH_JOINT))
+	# connecting rods (placed every frame) and the attachment joints on the underside of the plate (they tilt with it)
+	for rod in [rod_x, rod_y]:
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.012
+		cm.bottom_radius = 0.012
+		cm.height = 0.5
+		rod.mesh = cm
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = MECH_ROD
+		mat.metallic = 0.6
+		mat.roughness = 0.4
+		rod.material_override = mat
+		mech.add_child(rod)
+	table.add_child(_ball_node(0.026, Vector3(d, attach_y, 0), MECH_JOINT))
+	table.add_child(_ball_node(0.026, Vector3(0, attach_y, d), MECH_JOINT))
+
+
+## Horn angle (from the +u axis towards +v) so that a horn of length a on a shaft at s reaches a rod of length rod_len
+## ending at point p (two-bar linkage, elbow on the outer side).
+func _horn_angle(s: Vector2, p: Vector2, a: float, rod_len: float) -> float:
+	var dd := maxf((p - s).length(), 0.001)
+	var cb := clampf((a * a + dd * dd - rod_len * rod_len) / (2.0 * a * dd), -1.0, 1.0)
+	return atan2(p.y - s.y, p.x - s.x) - acos(cb)
+
+
+func _place_rod(rod: MeshInstance3D, p0: Vector3, p1: Vector3) -> void:
+	var dv := p1 - p0
+	var l := maxf(dv.length(), 0.001)
+	(rod.mesh as CylinderMesh).height = l
+	rod.position = (p0 + p1) / 2.0
+	rod.basis = Basis(Quaternion(Vector3.UP, dv / l))
+
+
+func _update_mechanism() -> void:
+	if mech_geo.is_empty():
+		return
+	var d: float = mech_geo["D"]
+	var a: float = mech_geo["a"]
+	var sy: float = mech_geo["sy"]
+	var rl: float = mech_geo["rod"]
+	var attach_y := -0.04
+	# servo X: attachment at the +x side of the plate, horn in the x-y plane
+	var ax := table.basis * Vector3(d, attach_y, 0)
+	var phi := _horn_angle(Vector2(d - a, sy), Vector2(ax.x, ax.y), a, rl)
+	horn_x.rotation = Vector3(0, 0, phi)
+	_place_rod(rod_x, Vector3(d - a + a * cos(phi), sy + a * sin(phi), 0), ax)
+	# servo Y: attachment at the +z side of the plate (sim -y), horn in the z-y plane (u = z, v = y)
+	var ay := table.basis * Vector3(0, attach_y, d)
+	phi = _horn_angle(Vector2(d - a, sy), Vector2(ay.z, ay.y), a, rl)
+	horn_y.rotation = Vector3(-phi, 0, 0)
+	_place_rod(rod_y, Vector3(0, sy + a * sin(phi), d - a + a * cos(phi)), ay)
 
 
 # ------------------------------------------------------------------- per frame
@@ -311,6 +451,7 @@ func _process(delta: float) -> void:
 	var za := Vector3(0, ty, 1).normalized()
 	var ya := za.cross(xa).normalized()
 	table.basis = Basis(xa, ya, za).orthonormalized()
+	_update_mechanism()
 
 	# ball (child of the table, table-local coordinates; z < 0 = falling off)
 	ball.position = Vector3(float(msg["x"]), R + float(msg.get("z", 0.0)), -float(msg["y"]))

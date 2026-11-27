@@ -37,6 +37,11 @@ Scaling lives in `config/sim.toml` (`[scaling]`); the PLC must use the same rang
 
 Table dimensions (size, ball radius, wall height and thickness) are in `config/sim.toml` `[table]`;
 the wall thickness is purely visual, the physical wall is the table edge.
+The plate stands on a **base with two servos**: a central pivot post with a ball joint under the plate centre, and a
+servo horn with a connecting rod from each servo to the underside of the plate (one servo for each tilt axis).  The
+horn angles are calculated from the simulated plate tilt (two-bar linkage), so the servos visibly tilt the plate; this
+is only the view, the physics is unchanged.
+
 Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).  With **no OPC UA client connected the table levels itself**.
 
 ## Physics (`ballplate/physics.py`)
