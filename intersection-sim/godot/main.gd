@@ -44,6 +44,9 @@ const GREENS := [Color(0.2, 0.5, 0.2), Color(0.28, 0.58, 0.25), Color(0.16, 0.42
 const PAVE := Color(0.72, 0.71, 0.68)
 const PAVE_W := 2.5                # pavement width along the road edges
 const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
+const KERB := Color(0.86, 0.86, 0.84)
+const KERB_W := 0.2
+const KERB_H := 0.13               # kerb stone top height
 const POLE_OFF := 4.6             # signal poles stand this far from the road centre line (the road edge is at 4.0)
 const PED_POLE_S := 7.9            # pedestrian light poles: distance of the crosswalk side from the crossing centre
 const TREE_OFFSET := 7.5            # distance of the tree rows from the road centre line
@@ -303,6 +306,14 @@ func _build_scene() -> void:
 		for sz in [-1.0, 1.0]:
 			_box(Vector3(plen, PAVE_H, PAVE_W), Vector3(float(sx) * (HALF + plen / 2.0), PAVE_H / 2.0, float(sz) * (HALF + PAVE_W / 2.0)), pave, null)
 			_box(Vector3(PAVE_W, PAVE_H, plen2), Vector3(float(sx) * (HALF + PAVE_W / 2.0), PAVE_H / 2.0, float(sz) * (HALF + PAVE_W + plen2 / 2.0)), pave, null)
+	# kerb line along the road edge of every pavement strip; open at the crosswalks (pedestrians step off there)
+	var kerb := _mat(KERB)
+	var k0 := CW1 + 0.2
+	var klen := ROAD_HALF - k0
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_box(Vector3(klen, KERB_H, KERB_W), Vector3(float(sx) * (k0 + klen / 2.0), KERB_H / 2.0, float(sz) * (HALF + KERB_W / 2.0)), kerb, null)
+			_box(Vector3(KERB_W, KERB_H, klen), Vector3(float(sx) * (HALF + KERB_W / 2.0), KERB_H / 2.0, float(sz) * (k0 + klen / 2.0)), kerb, null)
 	# vehicle detector loops (stop-line side of each arm)
 	var loops := {"XTD11": Vector3(-9.5, 0.06, 2.0), "XTD12": Vector3(9.5, 0.06, -2.0),
 		"XTD21": Vector3(-2.0, 0.06, -9.5), "XTD22": Vector3(2.0, 0.06, 9.5)}
