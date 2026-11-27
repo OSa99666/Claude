@@ -257,7 +257,7 @@ func _ped_head(x: float, z: float, face: Vector3, group: int) -> void:
 	if not req_lamps.has(group):
 		req_lamps[group] = []
 	req_lamps[group].append(rl)
-	var bb := _box(Vector3(0.18, 0.18, 0.1), Vector3(0, 1.3, 0.1), _mat(Color(0.45, 0.45, 0.45)), root)
+	var bb := _box(Vector3(0.18, 0.18, 0.1), Vector3(0, 1.3, -0.08), _mat(Color(0.45, 0.45, 0.45)), root)
 	if not btn_nodes.has(group):
 		btn_nodes[group] = []
 	btn_nodes[group].append(bb)
