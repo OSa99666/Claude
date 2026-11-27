@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import math
+import random
 import socket
 import time
 
@@ -20,6 +21,7 @@ from . import subscription_tweaks
 from .opcua_server import SimServer
 from .physics import BallPlate, Params
 from .scaling import from_raw, to_raw
+from .testaids import FaultCfg, Faults, Imperfections, ImperfectionPipeline, Metrics
 from .ui_link import UiLink
 
 log = logging.getLogger("sim")
@@ -67,6 +69,25 @@ class Simulator:
         self.last_raw = {}
         self.stats = self._new_stats()
         self.last_tilt_change = 0.0
+        # test aids: imperfections, faults, control-quality metrics (all off / idle by default)
+        seed = int(cfg["sim"].get("random_seed", 0))
+        im, ft = cfg.get("imperfections", {}), cfg.get("faults", {})
+        self.imp = ImperfectionPipeline(Imperfections(
+            noise_pos_mm=float(im.get("noise_pos_mm", 0.0)), noise_vel_mms=float(im.get("noise_vel_mms", 0.0)),
+            noise_acc=float(im.get("noise_acc_ms2", 0.0)), delay_ms=float(im.get("feedback_delay_ms", 0.0)),
+            quant_bits=int(im.get("quantisation_bits", 16)), dead_ms=float(im.get("tilt_dead_time_ms", 0.0)),
+            backlash_deg=float(im.get("tilt_backlash_deg", 0.0)), offset_x_deg=float(im.get("tilt_offset_x_deg", 0.0)),
+            offset_y_deg=float(im.get("tilt_offset_y_deg", 0.0))), seed)
+        self.faults = Faults(FaultCfg(
+            kick_per_min=float(ft.get("kicks_per_min", 0.0)), kick_v=float(ft.get("kick_speed_ms", 0.3)),
+            freeze_per_min=float(ft.get("feedback_freezes_per_min", 0.0)), freeze_s=float(ft.get("feedback_freeze_s", 1.0)),
+            stick_per_min=float(ft.get("actuator_sticks_per_min", 0.0)), stick_s=float(ft.get("actuator_stick_s", 1.0))), seed)
+        self.seed = seed
+        self.seed_ui = seed
+        self.rel = {"rel_x": 0.5, "rel_y": 0.3, "rel_vx": 0.0, "rel_vy": 0.0}
+        self.metrics = Metrics()
+        self.rel_rng = random.Random(seed or None)
+        self.last_tilt_cmd = (0.0, 0.0)
         v = cfg["visual"]
         self.udp = None
         if v.get("enabled", True):
@@ -100,10 +121,85 @@ class Simulator:
             m.hold_vy = vsy if u.get("hold_vy") else None
             m.hold_x = dsx if u.get("hold_x") else None
             m.hold_y = dsy if u.get("hold_y") else None
+            self._apply_test_aid_ui(u)
         if self.ui and self.ui.take_centre():
             self.model.center()
             self.prev_v = (0.0, 0.0)
             log.info("ball centred")
+        if self.ui:
+            self._apply_test_aid_actions()
+
+    def _apply_test_aid_ui(self, u: dict):
+        c, f, m = self.imp.c, self.faults.c, self.model
+        c.noise_pos_mm = max(0.0, _num(u, "imp_noise_pos", c.noise_pos_mm))
+        c.noise_vel_mms = max(0.0, _num(u, "imp_noise_vel", c.noise_vel_mms))
+        c.noise_acc = max(0.0, _num(u, "imp_noise_acc", c.noise_acc))
+        c.delay_ms = max(0.0, _num(u, "imp_delay_ms", c.delay_ms))
+        c.quant_bits = int(max(1, min(16, _num(u, "imp_quant_bits", c.quant_bits))))
+        c.dead_ms = max(0.0, _num(u, "imp_dead_ms", c.dead_ms))
+        c.backlash_deg = max(0.0, _num(u, "imp_backlash", c.backlash_deg))
+        c.offset_x_deg = _num(u, "imp_off_x", c.offset_x_deg)
+        c.offset_y_deg = _num(u, "imp_off_y", c.offset_y_deg)
+        f.kick_per_min = max(0.0, _num(u, "f_kick_per_min", f.kick_per_min))
+        f.kick_v = max(0.0, _num(u, "f_kick_v", f.kick_v))
+        f.freeze_per_min = max(0.0, _num(u, "f_freeze_per_min", f.freeze_per_min))
+        f.freeze_s = max(0.0, _num(u, "f_freeze_s", f.freeze_s))
+        f.stick_per_min = max(0.0, _num(u, "f_stick_per_min", f.stick_per_min))
+        f.stick_s = max(0.0, _num(u, "f_stick_s", f.stick_s))
+        self.seed_ui = int(_num(u, "f_seed", self.seed_ui))
+        m.patch_on = bool(u.get("patch_on", m.patch_on))
+        m.patch_x, m.patch_y = _num(u, "patch_x", m.patch_x), _num(u, "patch_y", m.patch_y)
+        m.patch_r = max(0.01, _num(u, "patch_r", m.patch_r))
+        m.patch_drag = max(0.0, _num(u, "patch_drag", m.patch_drag))
+        for k in self.rel:
+            self.rel[k] = _num(u, k, self.rel[k])
+        s = m.s
+        if self.metrics.set_target(_num(u, "tgt_x", self.metrics.tx), _num(u, "tgt_y", self.metrics.ty),
+                                   _num(u, "tgt_r", self.metrics.zone)):
+            self.metrics.start((s.x, s.y))                      # a new target starts a new measurement
+
+    def _apply_test_aid_actions(self):
+        ui, m, s = self.ui, self.model, self.model.s
+        if ui.take("release_seq"):
+            self.release(self.rel["rel_x"], self.rel["rel_y"], self.rel["rel_vx"], self.rel["rel_vy"])
+        if ui.take("release_random_seq"):
+            half = 0.5 * m.p.table_size - 2 * m.p.ball_radius
+            self.release(self.rel_rng.uniform(-half, half), self.rel_rng.uniform(-half, half),
+                         self.rel_rng.uniform(-0.2, 0.2), self.rel_rng.uniform(-0.2, 0.2))
+        if ui.take("metrics_start_seq"):
+            self.metrics.start((s.x, s.y))
+        if ui.take("kick_seq"):
+            self.faults.kick_now()
+        if ui.take("freeze_seq"):
+            self.faults.freeze_now()
+        if ui.take("stick_seq"):
+            self.faults.stick_now()
+        if ui.take("f_restart_seq"):
+            self.seed = self.seed_ui
+            self.faults.reseed(self.seed)
+            self.imp.reseed(self.seed)
+            self.rel_rng = random.Random(self.seed or None)
+            log.info("random generators restarted (seed %d)", self.seed)
+
+    def release(self, x: float, y: float, vx: float, vy: float):
+        """Release the ball at (x, y) with velocity (vx, vy) and start a new measurement."""
+        half = 0.5 * self.model.p.table_size - self.model.p.ball_radius
+        x, y = max(-half, min(half, x)), max(-half, min(half, y))
+        self.model.reset(x, y, vx, vy)
+        self.prev_v = (vx, vy)
+        self.metrics.start((x, y))
+        log.info("ball released at (%+.2f, %+.2f) m with (%+.2f, %+.2f) m/s", x, y, vx, vy)
+
+    def test_params(self) -> dict:
+        c, f, m = self.imp.c, self.faults.c, self.model
+        return {"imp_noise_pos": c.noise_pos_mm, "imp_noise_vel": c.noise_vel_mms, "imp_noise_acc": c.noise_acc,
+                "imp_delay_ms": c.delay_ms, "imp_quant_bits": c.quant_bits, "imp_dead_ms": c.dead_ms,
+                "imp_backlash": c.backlash_deg, "imp_off_x": c.offset_x_deg, "imp_off_y": c.offset_y_deg,
+                "f_kick_per_min": f.kick_per_min, "f_kick_v": f.kick_v, "f_freeze_per_min": f.freeze_per_min,
+                "f_freeze_s": f.freeze_s, "f_stick_per_min": f.stick_per_min, "f_stick_s": f.stick_s,
+                "f_seed": self.seed, "patch_on": m.patch_on, "patch_x": m.patch_x, "patch_y": m.patch_y,
+                "patch_r": m.patch_r, "patch_drag": m.patch_drag,
+                "tgt_x": self.metrics.tx, "tgt_y": self.metrics.ty, "tgt_r": self.metrics.zone, **self.rel}
 
     # ------------------------------------------------------------ model -> PLC
     def output_words(self) -> dict[str, int]:
@@ -115,12 +211,17 @@ class Simulator:
         ax = (s.vx - self.prev_v[0]) / self.cycle
         ay = (s.vy - self.prev_v[1]) / self.cycle
         self.prev_v = (s.vx, s.vy)
+        # sensor imperfections: delay + noise on the physical values, then scaling and quantisation
+        px, pvx, pxx, py, pvy, pyy = self.imp.feedback((ax, s.vx, s.x, ay, s.vy, s.y), self.cycle)
+        if self.faults.frozen and self.last_raw:                   # stuck sensor / communication drop
+            return dict(self.last_raw)
         a, d = sc["accel_ms2"], sc["dist_m"]
+        q = lambda v: self.imp.quantise(v, rm)
         return {
-            "F_XG10": to_raw(ax, -a, a, rm), "F_XG11": to_raw(s.vx, sc["vel_min"], sc["vel_max"], rm),
-            "F_XG12": to_raw(s.x, -d, d, rm),
-            "F_XG20": to_raw(ay, -a, a, rm), "F_XG21": to_raw(s.vy, sc["vel_min"], sc["vel_max"], rm),
-            "F_XG22": to_raw(s.y, -d, d, rm),
+            "F_XG10": q(to_raw(px, -a, a, rm)), "F_XG11": q(to_raw(pvx, sc["vel_min"], sc["vel_max"], rm)),
+            "F_XG12": q(to_raw(pxx, -d, d, rm)),
+            "F_XG20": q(to_raw(py, -a, a, rm)), "F_XG21": q(to_raw(pvy, sc["vel_min"], sc["vel_max"], rm)),
+            "F_XG22": q(to_raw(pyy, -d, d, rm)),
         }
 
     def send_visual(self):
@@ -132,9 +233,12 @@ class Simulator:
                "tx": s.tilt_x, "ty": s.tilt_y, "q": s.q, "slip": s.slipping,
                "plc": self.clients > 0, "clients": self.clients,
                "raw": self.last_raw, "tilt_raw": list(self.raw_tilt),
+               "metrics": self.metrics.state(), "faults": self.faults.state(),
+               "patch": {"on": self.model.patch_on, "x": self.model.patch_x, "y": self.model.patch_y,
+                         "r": self.model.patch_r},
                "params": {"elasticity": self.elasticity, "mu_s": p.mu_s, "mu_k": p.mu_k,
                           "vel_min": self.sc["vel_min"], "vel_max": self.sc["vel_max"],
-                          "limit_velocity": p.limit_velocity}}
+                          "limit_velocity": p.limit_velocity, **self.test_params()}}
         try:
             self.udp.sendto(json.dumps(msg).encode(), self.udp_addr)
         except OSError:
@@ -157,10 +261,21 @@ class Simulator:
         else:
             tx = from_raw(self.raw_tilt[0], -sc["tilt_deg"], sc["tilt_deg"], sc["raw_max"])
             ty = from_raw(self.raw_tilt[1], -sc["tilt_deg"], sc["tilt_deg"], sc["raw_max"])
+        tx, ty = self.imp.tilt(tx, ty, self.cycle)               # dead time, backlash, calibration offset
+        if self.faults.stuck:
+            tx, ty = self.last_tilt_cmd                          # actuator stuck: keeps its last command
+        else:
+            self.last_tilt_cmd = (tx, ty)
         self.model.set_tilt_setpoint_deg(tx, ty)
+        self.faults.step(self.cycle)
+        kick = self.faults.take_kick()
+        if kick:
+            self.model.kick(*kick)
         t_phys = time.perf_counter()
         for _ in range(self.nsub):
             self.model.step(self.dt)
+        s = self.model.s
+        self.metrics.update(self.cycle, s.x, s.y, not s.off_table)
         self.t += self.cycle
         self.last_raw = self.output_words()
         t_io = time.perf_counter()

@@ -2,7 +2,7 @@
 
 Godot resends the full state a few times per second, so lost packets do not
 matter.  One-shot commands use a sequence counter (``center_seq``): the
-simulator acts when the counter changes.
+simulator acts when the counter increases.  Every key ending in ``_seq`` is such a counter (``take(key)``).
 """
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ log = logging.getLogger("ui")
 class UiLink(asyncio.DatagramProtocol):
     def __init__(self):
         self.latest: dict = {}
-        self.last_seq = None
-        self.centre_requested = False
+        self.last_seq: dict[str, int] = {}
+        self.pending: set[str] = set()
 
     @classmethod
     async def start(cls, port: int, host: str = "0.0.0.0") -> "UiLink":
@@ -34,13 +34,18 @@ class UiLink(asyncio.DatagramProtocol):
         if not isinstance(msg, dict):
             return
         self.latest = msg
-        seq = msg.get("center_seq")
-        if seq is not None:
-            # only an *increase* is a button press; a restarted Godot starts again at 0
-            if self.last_seq is not None and seq > self.last_seq:
-                self.centre_requested = True
-            self.last_seq = seq
+        for k, v in msg.items():
+            if k.endswith("_seq") and isinstance(v, int) and not isinstance(v, bool):
+                # only an *increase* is a button press; a restarted Godot starts again at 0
+                if k in self.last_seq and v > self.last_seq[k]:
+                    self.pending.add(k)
+                self.last_seq[k] = v
+
+    def take(self, key: str) -> bool:
+        if key in self.pending:
+            self.pending.discard(key)
+            return True
+        return False
 
     def take_centre(self) -> bool:
-        r, self.centre_requested = self.centre_requested, False
-        return r
+        return self.take("center_seq")

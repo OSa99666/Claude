@@ -55,3 +55,23 @@ host         = "127.0.0.1"   # where Godot listens for state (UDP)
 port         = 9870
 command_port = 9871          # where the simulator listens for Godot's UI commands
 enabled      = true
+
+# Test aids for the PLC (all off by default; the Godot panel overrides them while running)
+[imperfections]
+noise_pos_mm       = 0.0     # noise on the distance words (std dev)
+noise_vel_mms      = 0.0     # noise on the velocity words
+noise_acc_ms2      = 0.0     # noise on the acceleration words
+feedback_delay_ms  = 0.0     # delay of all feedback words
+quantisation_bits  = 16      # effective resolution of the feedback words (16 = full)
+tilt_dead_time_ms  = 0.0     # dead time of the tilt command
+tilt_backlash_deg  = 0.0     # play in the tilt mechanism
+tilt_offset_x_deg  = 0.0     # calibration offset of the tilt
+tilt_offset_y_deg  = 0.0
+
+[faults]
+kicks_per_min             = 0.0   # random pushes of the ball
+kick_speed_ms             = 0.3   # push size (velocity change)
+feedback_freezes_per_min  = 0.0   # stuck sensor / communication drop
+feedback_freeze_s         = 1.0
+actuator_sticks_per_min   = 0.0   # tilt actuator holds its last command
+actuator_stick_s          = 1.0

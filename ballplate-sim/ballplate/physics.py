@@ -25,6 +25,9 @@ Extras used by the PLC-facing simulator
 * ``hold_vx/hold_vy`` force the ball velocity (rolling-consistent spin) and
   ``hold_x/hold_y`` pin the ball position while they are not None.
 * ``limit_velocity`` clamps each velocity component to [v_min, v_max].
+* ``patch_on`` adds a sticky circular patch (centre ``patch_x/patch_y``, radius ``patch_r``): inside it the rolling
+  resistance is increased by ``patch_drag`` (in g, i.e. a deceleration of patch_drag * 9.81 m/s^2).
+* ``kick(dvx, dvy)`` adds a velocity impulse (a push); ``reset(x, y, vx, vy)`` releases the ball with a velocity.
 
 Solid sphere: I = 2/5 m R^2, so the effective tangential mass at a contact
 is 2m/7 (this is where the famous 5/7 g sin(theta) comes from).
@@ -106,6 +109,11 @@ class BallPlate:
     hold_vy: float | None = None
     hold_x: float | None = None
     hold_y: float | None = None
+    patch_on: bool = False          # sticky patch on the plate (extra rolling resistance inside a circle)
+    patch_x: float = 0.4
+    patch_y: float = 0.3
+    patch_r: float = 0.25
+    patch_drag: float = 0.15
 
     # ------------------------------------------------------------------ API
     def reset(self, x=0.0, y=0.0, vx=0.0, vy=0.0):
@@ -120,6 +128,20 @@ class BallPlate:
         """Ball to the table centre, at rest, back on the table."""
         self.reset(0.0, 0.0)
         self.s.wx = self.s.wy = self.s.wz = 0.0
+
+    def kick(self, dvx: float, dvy: float):
+        """A push: velocity change of the ball (rolling-consistent spin)."""
+        s, R = self.s, self.p.ball_radius
+        if s.off_table:
+            return
+        s.vx += dvx
+        s.vy += dvy
+        s.wy = s.vx / R
+        s.wx = -s.vy / R
+
+    def in_patch(self) -> bool:
+        s = self.s
+        return self.patch_on and math.hypot(s.x - self.patch_x, s.y - self.patch_y) <= self.patch_r
 
     def set_tilt_setpoint_deg(self, tx_deg: float, ty_deg: float):
         m = self.p.tilt_max_deg
@@ -186,10 +208,11 @@ class BallPlate:
         s.wy += (-R * fx / I) * dt
         s.wz *= max(0.0, 1.0 - p.spin_damping * dt)
 
-        if not s.slipping and p.c_rr > 0.0:
+        c_rr = p.c_rr + (self.patch_drag if self.in_patch() else 0.0)
+        if not s.slipping and c_rr > 0.0:
             sp = math.hypot(s.vx, s.vy)
             if sp > 0.0:
-                f = max(0.0, 1.0 - p.c_rr * G * dt / sp)
+                f = max(0.0, 1.0 - c_rr * G * dt / sp)
                 s.vx *= f; s.vy *= f; s.wx *= f; s.wy *= f
 
         s.x += s.vx * dt
