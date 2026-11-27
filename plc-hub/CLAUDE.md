@@ -15,6 +15,6 @@ Shared hub package (not copied into each simulation).
   standalone mode.
 - Gotchas found: asyncua server does not keep the client's session name (patched to tell simulations from the PLC); mock PLCs crash on
   bad-quality reads (a real PLC just sees the quality); a PLC that is gone leaves the last PLC -> sim values in the hub (simulations only
-  use them while a PLC client is connected).  Not verified: the real CODESYS Data Source Manager against the hub (namespace index 2 for all
-  simulations, behaviour on bad quality, single connection with 92 tags at 10 ms task cycle).
+  use them while a PLC client is connected).  CONFIRMED by the user on the real PLC: one CODESYS connection controls all simulations in parallel through the hub.
+  Not explicitly checked: behaviour of the Data Source Manager on bad quality (dead simulation).
 - Tests: `python -m pytest -q` in `plc-hub` (9 pass).  Never put passwords/tokens in the repo.

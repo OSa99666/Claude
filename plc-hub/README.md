@@ -69,3 +69,7 @@ output changing every cycle); five separate servers used about 42 % in total.
 `python -m pytest -q` in `plc-hub` (needs `../*-sim` on the path, done by `pytest.ini`): manifest, hub lifecycle (first start, shared hub,
 stop delay, restart, foreign server on the port), data both ways, dead simulation quality, PLC vs simulation sessions, and all five real
 simulations in hub mode controlled by one PLC connection.
+
+## Status
+
+Confirmed by the user with a real PLC: one data source connection controls all simulations in parallel through the hub.
