@@ -6,6 +6,9 @@ extends Node2D
 ##  * sends the parameter/command values from the panel back to the simulator
 ##    (UDP, port 9879, to the address the state packets come from).
 ##
+## I_XF (hardware fault of the traffic light system, e.g. a broken lamp) is shown as the 'Intersection fault' box top right; a collision shows the
+## crash smiley.
+##
 ## Direction 1 = west-east road, direction 2 = north-south road.  Traffic lights show what is really lit
 ## (command and lamp not broken); a broken lamp gets an orange cross.  Yellow disc at a pedestrian light =
 ## request acknowledged by the PLC (I_YPDnA), orange square = push button pressed, orange loops = vehicle detectors.
@@ -73,7 +76,7 @@ func _ready() -> void:
 	hud.add_theme_font_size_override("font_size", 15)
 	hud.add_theme_color_override("font_color", Color(0.05, 0.07, 0.1))
 	layer.add_child(hud)
-	fault_box.text = "Intersection fault"
+	fault_box.text = "Intersection fault (I_XF)"
 	fault_box.add_theme_font_size_override("font_size", 16)
 	fault_box.add_theme_color_override("font_color", Color(0.8, 0.0, 0.0))
 	fault_box.visible = false
@@ -222,7 +225,7 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# crash smiley
-	if bool(msg.get("fault", false)):
+	if bool(msg.get("crash", false)):
 		var cc := _w(0.0, 0.0)
 		draw_circle(cc, 2.2 * scale_px, Color(1.0, 0.8, 0.1))
 		draw_arc(cc, 2.2 * scale_px, 0.0, TAU, 32, Color(0.2, 0.2, 0.1), 2.0)
@@ -308,8 +311,10 @@ func _build_panel(layer: CanvasLayer) -> void:
 	_button(box, "Restart random traffic with this seed", func() -> void:
 		reseed_seq += 1
 		_send_ui())
-	_heading(box, "Fault (collision) and scoreboard")
-	_button(box, "Clear fault (remove crashed vehicles)", func() -> void:
+	_heading(box, "Hardware fault I_XF")
+	_check(box, "Force I_XF (any broken lamp sets it too)", "hw_fault")
+	_heading(box, "Collisions and scoreboard")
+	_button(box, "Clear collision (remove crashed vehicles)", func() -> void:
 		clear_fault_seq += 1
 		_send_ui())
 	_button(box, "Reset scoreboard", func() -> void:
@@ -431,7 +436,7 @@ func _process(_delta: float) -> void:
 	if send_timer > 0.2:
 		send_timer = 0.0
 		_send_ui()
-	fault_box.visible = bool(msg.get("fault", false))
+	fault_box.visible = bool(msg.get("hw_fault", false))
 	var s: Dictionary = msg.get("stats", {})
 	var q: Dictionary = msg.get("queue", {})
 	var cars: Array = msg.get("cars", [])
@@ -440,3 +445,5 @@ func _process(_delta: float) -> void:
 		cars.size(), int(s.get("cars_passed", 0)), float(s.get("car_wait_avg", 0.0)),
 		int(q.get("W", 0)), int(q.get("E", 0)), int(q.get("N", 0)), int(q.get("S", 0)), int(s.get("max_queue", 0)),
 		int(s.get("peds_crossed", 0)), float(s.get("ped_wait_avg", 0.0)), int(s.get("violations", 0)), int(s.get("crashes", 0))]
+	if bool(msg.get("crash", false)):
+		hud.text += "\nCOLLISION - clear it in the panel"

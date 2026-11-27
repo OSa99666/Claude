@@ -29,7 +29,7 @@ def test_car_stops_at_red_and_detector_and_goes_on_green():
     assert c.v < 0.01 and STOP - 1.0 < c.s <= STOP + 0.2          # waiting at the stop line
     assert out["XTD11"] and not out["XTD12"] and not out["XTD21"]
     out = run(m, 12, GREEN1)
-    assert c.s > 5 and not m.fault
+    assert c.s > 5 and not m.crash
     run(m, 10, GREEN1)
     assert m.stats["cars_passed"] == 1
 
@@ -60,11 +60,12 @@ def test_conflicting_greens_crash_and_latch_fault():
     m.add_car("N", s=-30, v=10.0)
     both = {"TL1G": True, "TL2G": True, "PL1R": True, "PL2R": True}
     out = run(m, 6, both)
-    assert out["F"] and m.stats["crashes"] == 1
+    assert m.crash and m.stats["crashes"] == 1
+    assert not out["F"]                                              # a collision is not the hardware fault I_XF
     run(m, 5, GREEN1)
-    assert m.fault                                                   # stays latched
+    assert m.crash                                                   # stays latched
     m.clear_fault()
-    assert not m.fault and not m.cars
+    assert not m.crash and not m.cars
 
 
 def test_runner_ignores_red():
@@ -109,13 +110,18 @@ def test_car_yields_to_crossing_pedestrian():
     q.state, q.u = "cross", 0.1
     c = m.add_car("N", s=-30, v=10.0)
     run(m, 4, {"TL2G": True, "TL1R": True})
-    assert c.s <= STOP + 0.5 and not m.fault                         # green, but the pedestrian is on the crosswalk
+    assert c.s <= STOP + 0.5 and not m.crash                         # green, but the pedestrian is on the crosswalk
 
 
 def test_broken_lamp_feedback_and_detector_faults():
     m = quiet(broken={"TL1G"})
     out = run(m, 0.1, GREEN1)
     assert out["TL1G"] is False                                      # commanded but not lit
+    assert out["F"] is True                                          # I_XF: hardware error
+    m.p.broken = set()
+    assert run(m, 0.1, GREEN1)["F"] is False
+    m.p.hw_fault = True
+    assert run(m, 0.1, GREEN1)["F"] is True
     m.p.det_stuck = {"XTD22"}
     assert run(m, 0.1, RED)["XTD22"]
     m.p.det_stuck = set()
@@ -143,6 +149,6 @@ def test_fixed_time_controller_no_crash_and_throughput():
         cmd = ctrl.step(DT, {"PD1": m.btn[1], "PD2": m.btn[2]})
         assert not (cmd["TL1G"] and cmd["TL2G"])
         m.step(DT, cmd)
-    assert not m.fault and m.stats["crashes"] == 0
+    assert not m.crash and m.stats["crashes"] == 0
     assert m.stats["cars_passed"] > 60 and m.stats["peds_crossed"] > 10
     assert m.stats["violations"] == 0

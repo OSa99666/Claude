@@ -67,13 +67,14 @@ class Simulator:
                 p.ped_rate[g] = min(120.0, max(0.0, _num(u, "ped_rate_%d" % g, p.ped_rate[g])))
             p.ped_speed = min(3.0, max(0.3, _num(u, "ped_speed", p.ped_speed)))
             p.traffic_on = bool(u.get("traffic_on", p.traffic_on))
+            p.hw_fault = bool(u.get("hw_fault", p.hw_fault))
             for prefix, (attr, names) in BOOL_SETS.items():
                 setattr(p, attr, {n for n in names if u.get(prefix + n, False)})
             p.btn_stuck = {g for g in (1, 2) if u.get("stuck_PD%d" % g, False)}
         if self.ui:
             if self.ui.take("clear_fault_seq"):
                 self.model.clear_fault()
-                log.info("fault cleared")
+                log.info("crash cleared")
             if self.ui.take("reset_stats_seq"):
                 self.model.reset_stats()
             if self.ui.take("reseed_seq"):
@@ -87,7 +88,7 @@ class Simulator:
         p = m.p
         params = {"rate_" + a.lower(): p.rate[a] for a in ARMS}
         params.update(v0=p.v0, runner_prob=p.runner_prob * 100.0, ped_rate_1=p.ped_rate[1], ped_rate_2=p.ped_rate[2],
-                      ped_speed=p.ped_speed, traffic_on=p.traffic_on)
+                      ped_speed=p.ped_speed, traffic_on=p.traffic_on, hw_fault=p.hw_fault)
         for prefix, (attr, names) in BOOL_SETS.items():
             for n in names:
                 params[prefix + n] = n in getattr(p, attr)
@@ -96,7 +97,7 @@ class Simulator:
         s = m.stats
         npass = max(1, s["cars_passed"])
         npeds = max(1, s["peds_crossed"])
-        msg = {"t": round(self.t, 3), "fault": m.fault, "plc": self.clients > 0, "clients": self.clients,
+        msg = {"t": round(self.t, 3), "crash": m.crash, "hw_fault": m.hardware_fault(), "plc": self.clients > 0, "clients": self.clients,
                "cmd": self.cmd, "lit": m.lit, "det": m.det, "btn": {"1": m.btn[1], "2": m.btn[2]},
                "cars": [[c.arm, round(c.s, 2), c.crashed, c.cid] for c in m.cars],
                "peds": [[q.cw, round(q.u, 3), q.d, q.state] for q in m.peds],
@@ -129,8 +130,8 @@ class Simulator:
                 if now - last_log > 2.0:
                     m = self.model
                     lamps = "".join(n[-1] if m.lit[n] else "." for n in ("TL1R", "TL1Y", "TL1G", "TL2R", "TL2Y", "TL2G"))
-                    log.info("t=%6.1fs cars=%d peds=%d passed=%d crashes=%d fault=%d lamps(TL1 TL2)=%s clients=%d", self.t,
-                             len(m.cars), len(m.peds), m.stats["cars_passed"], m.stats["crashes"], m.fault, lamps, self.clients)
+                    log.info("t=%6.1fs cars=%d peds=%d passed=%d crashes=%d crash=%d I_XF=%d lamps(TL1 TL2)=%s clients=%d", self.t,
+                             len(m.cars), len(m.peds), m.stats["cars_passed"], m.stats["crashes"], m.crash, m.hardware_fault(), lamps, self.clients)
                     last_log = now
                 next_t += self.cycle
                 delay = next_t - time.monotonic()

@@ -8,7 +8,7 @@ simulator -> PLC (17):  I_XTL1R/Y/G, I_XTL2R/Y/G   traffic light feedback (lamp 
                         I_XTD11, I_XTD12           vehicle detectors direction 1 (arm W, arm E)
                         I_XTD21, I_XTD22           vehicle detectors direction 2 (arm N, arm S)
                         I_XPD1, I_XPD2             pedestrian push buttons
-                        I_XF                       intersection fault (collision, latched)
+                        I_XF                       intersection fault: hardware error of the traffic light system (broken lamp)
 Internal short names (used by the model) are the tag without the ``I_Y`` / ``I_X`` prefix and the lamp/detector part:
 ``TL1R`` ... ``PL2G``, ``PD1A``/``PD2A`` (outputs), ``XTD11`` ... ``PD1``/``PD2``, ``F`` (inputs).
 """

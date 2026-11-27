@@ -61,6 +61,7 @@ async def scenario():
         send_ui(bk_TL1G=True)
         await asyncio.sleep(0.3)
         assert await rd("I_XTL1G") is False
+        assert await rd("I_XF") is True                                            # hardware fault: broken lamp
         send_ui(bk_TL1G=False, stuck_XTD22=True, stuck_PD2=True)
         await asyncio.sleep(0.3)
         assert await rd("I_XTL1G") is True and await rd("I_XTD22") is True and await rd("I_XPD2") is True
@@ -77,12 +78,15 @@ async def scenario():
         await N("I_YTL2R").write_value(B(False))
         await N("I_YTL2G").write_value(B(True))
         await asyncio.sleep(4.0)
-        assert await rd("I_XF") is True
+        assert sim.model.crash and await rd("I_XF") is False                       # collision is not I_XF
         send_ui(clear_fault_seq=0)
         await asyncio.sleep(0.1)
         send_ui(clear_fault_seq=1)
         await asyncio.sleep(0.3)
-        assert await rd("I_XF") is False
+        assert not sim.model.crash
+        send_ui(hw_fault=True)
+        await asyncio.sleep(0.3)
+        assert await rd("I_XF") is True
     finally:
         await c.disconnect()
         task.cancel()

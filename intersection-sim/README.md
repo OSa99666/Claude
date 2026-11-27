@@ -34,7 +34,7 @@ Simulator → PLC (17):
 | `I_XTD11` `I_XTD12` | vehicle detector direction 1: arm west / arm east (loop at the stop line, true while a car is on it) |
 | `I_XTD21` `I_XTD22` | vehicle detector direction 2: arm north / arm south |
 | `I_XPD1` `I_XPD2` | pedestrian push button group 1 / 2 (pulse of 0.6 s per press; a waiting pedestrian presses again after 10 s unless `I_YPDnA` is lit) |
-| `I_XF` | intersection fault: a collision (car-car or car-pedestrian), **latched** until cleared in the Godot panel |
+| `I_XF` | intersection fault: error in the traffic light **hardware** - true while any lamp is broken (also forced from the panel).  A collision is *not* reported to the PLC |
 
 **Addresses:** the OPC UA variables are identified by tag name, so the simulator does not depend on the %Q/%I addresses.  The list
 supplied has overlaps (`I_YPL2R`..`I_YPD2A` start again at `%Q50.0`, `I_XPL2R`.. at `%I50.0`, `I_XF` at `%I50.0`); within the Data Source
@@ -60,8 +60,8 @@ Manager mapping they should be unique, for example:
 * **Pedestrians**: group 1 walks along direction 1 and uses the crosswalks over the direction-2 road (north / south arms), so `I_YPL1G` is
   meant to be green while the direction-1 traffic light is green; group 2 the other way round.  A pedestrian presses the push button, waits and
   starts to cross when the pedestrian light is green (feedback) and no car is about to reach the crosswalk.
-* **Fault `I_XF`**: two vehicles of different directions overlap (e.g. both lights green), or a vehicle hits a pedestrian.  The vehicles stay
-  as wrecks, the fault stays latched until *Clear fault* in the panel.
+* **Collision** (not an IO): two vehicles of different directions overlap (e.g. both lights green), or a vehicle hits a pedestrian.  The vehicles stay
+  as wrecks with a crash smiley; it stays latched until *Clear collision* in the panel (the PLC only sees the effect on the detectors).
 * Scoreboard (in the HUD): vehicles passed, average wait, queues, pedestrians crossed / average wait, red-light violations, crashes.
 * Faults for the exercises (panel): broken lamps (feedback reads false, drivers see a dark lamp), detectors dead / stuck, push buttons stuck.
 
@@ -86,4 +86,4 @@ DatasourcesTasks cycle (40 ms needs a 10 ms task), otherwise the Data Source Man
   without crash), OPC UA round trip, headless `run.sh` with the mock PLC.
 * **Not run in Godot** (no Godot in the development container) - the 2D view and panel have to be checked by the user.
 * Assumptions to confirm: the pedestrian light / direction naming (group 1 walks with direction-1 traffic), the detector assignment
-  (`I_XTD11` west arm, `I_XTD12` east, `I_XTD21` north, `I_XTD22` south), `I_XF` = collision.  Not verified: the real PLC link.
+  (`I_XTD11` west arm, `I_XTD12` east, `I_XTD21` north, `I_XTD22` south), `I_XF` = hardware error (broken lamp; detector/button faults do not set it).  Not verified: the real PLC link.

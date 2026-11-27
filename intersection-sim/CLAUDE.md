@@ -7,9 +7,10 @@ Same pattern as the other sims (`../level-sim` is the closest: Bool/Int IO, mock
   crosses = broken lamps, smiley + 'Intersection fault' = crash).  IO tags exactly as supplied (29 Bool, `I_Y*` PLC->sim, `I_X*` sim->PLC).
   The supplied %Q/%I addresses overlap; the sim does not depend on them (tag names); corrected proposal in the README.
 - Model `intersectionsim/model.py` (pure Python, no OPC UA): IDM car following, stop line / yellow decision / pedestrian yield,
-  runners, pedestrians with push button + request lamp, collisions -> latched `I_XF`, scoreboard, faults (broken lamps, detectors, buttons).
+  runners, pedestrians with push button + request lamp, collisions -> latched `crash` (display only), scoreboard, faults (broken lamps, detectors, buttons).
   Dark head = red.  Mock PLC `FixedTime` (also used in tests) = two-phase fixed-time controller with ped requests.
 - Assumptions to confirm with the user: pedestrian group 1 walks along direction 1 and crosses the direction-2 road (PL1 green with TL1 green);
-  detectors XTD11 = W arm, XTD12 = E, XTD21 = N, XTD22 = S; I_XF = collision.
+  detectors XTD11 = W arm, XTD12 = E, XTD21 = N, XTD22 = S
+- CONFIRMED by the user: `I_XF` is just a binary input for any error in the traffic light HARDWARE -> model: true while any lamp is broken or the UI forces it (`hw_fault`); detector/button faults do not set it (ask if they should).  Collisions are not an IO.
 - Godot (`godot/main.gd`): Node2D top view drawn in `_draw`, scrolling panel.  WRITTEN WITHOUT RUNNING GODOT - the user checks it.
 - Tests: `python -m pytest -q` in `intersection-sim` (13 pass).  Never put passwords/tokens in the repo.

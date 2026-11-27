@@ -9,6 +9,9 @@ Pedestrians: group 1 walks along direction 1 (east-west) over the crosswalks of 
 the direction-2 road: pedestrian light PL1 may be green while TL1 is green.  Group 2 is the other way round.
 
 A vehicle is described by ``s`` = position of its FRONT along its travel direction (road centre s = 0, spawn at -ROAD_L).
+Output ``F`` (tag I_XF) is a hardware fault of the traffic light system (a lamp that does not light); a collision is NOT reported
+to the PLC, it only latches ``crash`` (shown in Godot) until ``clear_fault()``.
+
 Cars follow the intelligent-driver model (IDM) with the signal / pedestrian crossing as a standing obstacle at the stop line.
 """
 from __future__ import annotations
@@ -79,6 +82,7 @@ class Params:
     det_dead: set = field(default_factory=set)     # detectors stuck false
     det_stuck: set = field(default_factory=set)    # detectors stuck true
     btn_stuck: set = field(default_factory=set)    # pushbuttons 1/2 held pressed
+    hw_fault: bool = False                         # force I_XF (hardware fault) without a broken lamp
 
 
 @dataclass
@@ -120,7 +124,7 @@ class Intersection:
         self.det = {n: False for n in DETECTORS}
         self.btn = {1: False, 2: False}
         self.btn_timer = {1: 0.0, 2: 0.0}
-        self.fault = False
+        self.crash = False
         self.stats = self._new_stats()
         self.manual_feed: list[tuple[float, str]] = []   # (time, arm) scripted arrivals (tests)
 
@@ -136,10 +140,14 @@ class Intersection:
     def reset_stats(self):
         self.stats = self._new_stats()
 
+    def hardware_fault(self) -> bool:
+        """I_XF: any traffic light hardware error = a broken lamp (or the forced fault from the UI)."""
+        return bool(self.p.broken) or self.p.hw_fault
+
     def clear_fault(self):
         self.cars = [c for c in self.cars if not c.crashed]
         self.peds = [q for q in self.peds if q.state != "hit"]
-        self.fault = False
+        self.crash = False
 
     # ---------------------------------------------------------------- signals
     def signal(self, group: int) -> str:
@@ -326,9 +334,9 @@ class Intersection:
                     break
 
     def _crash(self):
-        if not self.fault:
+        if not self.crash:
             self.stats["crashes"] += 1
-        self.fault = True
+        self.crash = True
 
     # ------------------------------------------------------------------- step
     def queue_lengths(self) -> dict:
@@ -358,5 +366,5 @@ class Intersection:
             out[n] = self.lit[n]
         out.update(self.det)
         out["PD1"], out["PD2"] = self.btn[1], self.btn[2]
-        out["F"] = self.fault
+        out["F"] = self.hardware_fault()                    # I_XF: error in the traffic light hardware, not a collision
         return out
