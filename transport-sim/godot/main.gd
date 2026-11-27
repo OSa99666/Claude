@@ -677,18 +677,18 @@ func _add_motor_leds(motor_pos: Vector3, axis: Vector3, label: String) -> void:
 	_caption(label, motor_pos + Vector3(0, 0.16, 0))
 
 
-## Ejector: small panel on top of the cylinder housing with the command row (T_YH2n extend, T_YL2n retract)
-## and the feedback row (T_XGH2n extended, T_XGL2n retracted).
+## Ejector: LEDs directly on the top of the cylinder housing, at its back end (away from the belt):
+## command row (T_YH2n extend, T_YL2n retract) at the very end, feedback row (T_XGH2n extended, T_XGL2n retracted) in front of it.
 func _add_ejector_leds(x: float, label: String) -> void:
-	var zc := -BELT_W / 2.0 - 0.3
-	var hp := Vector3(x, 0.08, zc)                       # point on the housing axis
-	_led_panel(hp, Vector2(0.14, 0.13))
+	var zb := -BELT_W / 2.0 - 0.5                        # back end of the 0.5 m housing
 	var l: Array = []
 	for row in 2:
 		for col in 2:
-			l.append(_led_node(hp + Vector3(-0.032 + 0.064 * col, 0.072, -0.035 + 0.07 * row)))
+			var dx := -0.032 + 0.064 * col
+			var top := sqrt(0.07 * 0.07 - dx * dx)           # height of the round housing surface at this x offset
+			l.append(_led_node(Vector3(x + dx, 0.08 + top + 0.006, zb + 0.05 + 0.07 * row)))
 	ej_leds.append(l)
-	_caption(label, hp + Vector3(0, 0.16, 0))
+	_caption(label, Vector3(x, 0.24, zb + 0.085))
 
 
 func _b(v) -> String:

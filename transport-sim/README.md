@@ -72,8 +72,8 @@ and the PLC always agree); the detector gate lamp shows the same word and stays 
 Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- (or PageUp/Down) zoom, Home resets the view (a hint line is shown at the bottom of the window).
 
 Indicator LEDs (green = High / command / running, yellow = Low / retracted, metal = off): every **motor** has two LEDs
-above it - the start command `T_YHx` and the running feedback `T_XGHx` - and every **ejector** has a small panel on
-its cylinder with a command row (`T_YH2n` extend, `T_YL2n` retract) and a feedback row (`T_XGH2n` extended,
+above it - the start command `T_YHx` and the running feedback `T_XGHx` - and every **ejector** has four LEDs at the back end of
+its cylinder: a command row (`T_YH2n` extend, `T_YL2n` retract) and a feedback row (`T_XGH2n` extended,
 `T_XGL2n` retracted).  The feedback LEDs show what the PLC reads, including forced feedbacks.
 
 ## Quick start
