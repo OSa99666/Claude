@@ -41,6 +41,9 @@ const SIG_Y := Color(1.0, 0.65, 0.0)
 const SIG_G := Color(0.1, 0.85, 0.2)
 const METAL := Color(0.6, 0.63, 0.68)
 const GREENS := [Color(0.2, 0.5, 0.2), Color(0.28, 0.58, 0.25), Color(0.16, 0.42, 0.22)]
+const PAVE := Color(0.72, 0.71, 0.68)
+const PAVE_W := 2.5                # pavement width along the road edges
+const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
 const TREE_OFFSET := 7.5            # distance of the tree rows from the road centre line
 
 var hud := Label.new()
@@ -290,6 +293,14 @@ func _build_scene() -> void:
 	_box(Vector3(0.3, 0.02, HALF), Vector3(-STOP - 0.15, 0.05, -HALF / 2.0), zebra, null)
 	_box(Vector3(HALF, 0.02, 0.3), Vector3(-HALF / 2.0, 0.05, STOP + 0.15), zebra, null)
 	_box(Vector3(HALF, 0.02, 0.3), Vector3(HALF / 2.0, 0.05, -STOP - 0.15), zebra, null)
+	# pavements along both edges of both roads (the crossing corners are covered by the strips along the direction-1 road)
+	var pave := _mat(PAVE)
+	var plen := ROAD_HALF - HALF
+	var plen2 := ROAD_HALF - HALF - PAVE_W
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_box(Vector3(plen, PAVE_H, PAVE_W), Vector3(float(sx) * (HALF + plen / 2.0), PAVE_H / 2.0, float(sz) * (HALF + PAVE_W / 2.0)), pave, null)
+			_box(Vector3(PAVE_W, PAVE_H, plen2), Vector3(float(sx) * (HALF + PAVE_W / 2.0), PAVE_H / 2.0, float(sz) * (HALF + PAVE_W + plen2 / 2.0)), pave, null)
 	# vehicle detector loops (stop-line side of each arm)
 	var loops := {"XTD11": Vector3(-9.5, 0.06, 2.0), "XTD12": Vector3(9.5, 0.06, -2.0),
 		"XTD21": Vector3(-2.0, 0.06, -9.5), "XTD22": Vector3(2.0, 0.06, 9.5)}
@@ -750,12 +761,13 @@ func _process(delta: float) -> void:
 		(pn.get_meta("armL") as Node3D).rotation.z = -swing * 0.8
 		(pn.get_meta("armR") as Node3D).rotation.z = swing * 0.8
 		var shirt_m: StandardMaterial3D = pn.get_meta("shirt")
+		var base_y := PAVE_H if st == "wait" else 0.03        # waiting on the pavement, crossing on the road
 		if st == "hit":
-			pn.position = pp + Vector3(0, 0.2, 0)
+			pn.position = pp + Vector3(0, base_y + 0.2, 0)
 			pn.rotation = Vector3(0, pyaw, -PI / 2.0)                    # lies on the road
 			shirt_m.albedo_color = Color(0.8, 0.1, 0.1)
 		else:
-			pn.position = pp
+			pn.position = pp + Vector3(0, base_y, 0)
 			pn.rotation = Vector3(0, pyaw, 0)
 			shirt_m.albedo_color = pn.get_meta("shirt_col") as Color
 	for pid in ped_nodes.keys():
