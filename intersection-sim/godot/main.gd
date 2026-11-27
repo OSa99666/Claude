@@ -44,6 +44,8 @@ const GREENS := [Color(0.2, 0.5, 0.2), Color(0.28, 0.58, 0.25), Color(0.16, 0.42
 const PAVE := Color(0.72, 0.71, 0.68)
 const PAVE_W := 2.5                # pavement width along the road edges
 const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
+const POLE_OFF := 4.6             # signal poles stand this far from the road centre line (the road edge is at 4.0)
+const PED_POLE_S := 7.9            # pedestrian light poles: distance of the crosswalk side from the crossing centre
 const TREE_OFFSET := 7.5            # distance of the tree rows from the road centre line
 
 var hud := Label.new()
@@ -308,19 +310,20 @@ func _build_scene() -> void:
 		var d := _box(Vector3(3.0, 0.02, 3.0), loops[k], _mat(Color(0.85, 0.5, 0.2).darkened(0.3)), null)
 		det_nodes[k] = d
 	# signal heads: direction 1 (west / east arm) and direction 2 (north / south arm)
-	_traffic_head(-10.5, 5.8, Vector3(-1, 0, 0), 1)
-	_traffic_head(10.5, -5.8, Vector3(1, 0, 0), 1)
-	_traffic_head(-5.8, -10.5, Vector3(0, 0, -1), 2)
-	_traffic_head(5.8, 10.5, Vector3(0, 0, 1), 2)
+	_traffic_head(-10.5, POLE_OFF, Vector3(-1, 0, 0), 1)
+	_traffic_head(10.5, -POLE_OFF, Vector3(1, 0, 0), 1)
+	_traffic_head(-POLE_OFF, -10.5, Vector3(0, 0, -1), 2)
+	_traffic_head(POLE_OFF, 10.5, Vector3(0, 0, 1), 2)
 	# pedestrian lights at the ends of every crosswalk (facing the crosswalk)
-	_ped_head(-5.6, -5.9, Vector3(1, 0, 0), 1, true)
-	_ped_head(5.6, -5.9, Vector3(-1, 0, 0), 1, false)
-	_ped_head(-5.6, 5.9, Vector3(1, 0, 0), 1, false)
-	_ped_head(5.6, 5.9, Vector3(-1, 0, 0), 1, false)
-	_ped_head(-5.9, -5.6, Vector3(0, 0, 1), 2, true)
-	_ped_head(-5.9, 5.6, Vector3(0, 0, -1), 2, false)
-	_ped_head(5.9, -5.6, Vector3(0, 0, 1), 2, false)
-	_ped_head(5.9, 5.6, Vector3(0, 0, -1), 2, false)
+	# (beside the crosswalk on its outer side, at the kerb, facing across the road)
+	_ped_head(-POLE_OFF, -PED_POLE_S, Vector3(1, 0, 0), 1, true)
+	_ped_head(POLE_OFF, -PED_POLE_S, Vector3(-1, 0, 0), 1, false)
+	_ped_head(-POLE_OFF, PED_POLE_S, Vector3(1, 0, 0), 1, false)
+	_ped_head(POLE_OFF, PED_POLE_S, Vector3(-1, 0, 0), 1, false)
+	_ped_head(-PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2, true)
+	_ped_head(-PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2, false)
+	_ped_head(PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2, false)
+	_ped_head(PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2, false)
 	_label3d("Direction 1", Vector3(-ROAD_HALF * 0.55, 1.2, -1.5))
 	_label3d("Direction 2", Vector3(2.5, 1.2, ROAD_HALF * 0.55))
 	# crash ball (yellow, with a face) above the crossing
