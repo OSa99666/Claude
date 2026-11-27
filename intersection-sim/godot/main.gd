@@ -45,6 +45,8 @@ const PAVE := Color(0.72, 0.71, 0.68)
 const PAVE_W := 2.5                # pavement width along the road edges
 const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
 const KERB := Color(0.86, 0.86, 0.84)
+const FLAT := 0.35                 # thickness of the lamp lenses relative to their diameter
+const CORNER_R := 1.0              # radius of the rounded pavement / kerb corners
 const KERB_W := 0.2
 const KERB_H := 0.13               # kerb stone top height
 const POLE_OFF := 4.6             # signal poles stand this far from the road centre line (the road edge is at 4.0)
@@ -230,7 +232,8 @@ func _traffic_head(x: float, z: float, face: Vector3, group: int) -> void:
 	for i in 3:
 		var nm := "TL%d%s" % [group, letters[i]]
 		var p := Vector3(0, 4.85 - 0.62 * float(i), 0.22)
-		_sphere(0.25, p, _lamp_mat(nm, cols[i]), root)
+		var bulb := _sphere(0.25, p, _lamp_mat(nm, cols[i]), root)
+		bulb.scale = Vector3(1.0, 1.0, FLAT)                        # flat lens instead of a ball
 		_add_broken_mark(nm, root, p + Vector3(0, 0, 0.12))
 
 
@@ -244,8 +247,10 @@ func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> vo
 	_box(Vector3(0.5, 1.2, 0.3), Vector3(0, 2.7, 0), _mat(Color(0.12, 0.12, 0.14)), root)
 	var rn := "PL%dR" % group
 	var gn := "PL%dG" % group
-	_sphere(0.19, Vector3(0, 3.0, 0.16), _lamp_mat(rn, SIG_R), root)
-	_sphere(0.19, Vector3(0, 2.4, 0.16), _lamp_mat(gn, SIG_G), root)
+	var bulb_r := _sphere(0.19, Vector3(0, 3.0, 0.16), _lamp_mat(rn, SIG_R), root)
+	var bulb_g := _sphere(0.19, Vector3(0, 2.4, 0.16), _lamp_mat(gn, SIG_G), root)
+	bulb_r.scale = Vector3(1.0, 1.0, FLAT)
+	bulb_g.scale = Vector3(1.0, 1.0, FLAT)
 	_add_broken_mark(rn, root, Vector3(0, 3.0, 0.27))
 	_add_broken_mark(gn, root, Vector3(0, 2.4, 0.27))
 	if first:
@@ -258,6 +263,57 @@ func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> vo
 		if not btn_nodes.has(group):
 			btn_nodes[group] = []
 		btn_nodes[group].append(bb)
+
+
+## Triangle with an explicit normal; the winding is chosen so that it is a front face (Godot: clockwise seen from outside)
+func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3) -> void:
+	if (b - a).cross(c - a).dot(n) > 0.0:
+		var t := b
+		b = c
+		c = t
+	for v in [a, b, c]:
+		st.set_normal(n)
+		st.add_vertex(v)
+
+
+## Rounded pavement corner at the crossing corner (sx * 4, sz * 4): a road-coloured fillet cuts the pavement corner, a kerb
+## stone follows the arc (centre (sx * (4 + R), sz * (4 + R)), radius R; the stone is on the pavement side).
+func _kerb_corner(sx: float, sz: float) -> void:
+	var r := CORNER_R
+	var cx := sx * (HALF + r)
+	var cz := sz * (HALF + r)
+	var a0 := 0.0 if sx < 0.0 else PI
+	var da := PI / 2.0 if sx * sz > 0.0 else -PI / 2.0
+	var steps := 10
+	var fill := SurfaceTool.new()
+	fill.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ring := SurfaceTool.new()
+	ring.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var yf := PAVE_H + 0.004
+	var corner := Vector3(sx * HALF, yf, sz * HALF)
+	for k in steps:
+		var f0 := a0 + da * float(k) / float(steps)
+		var f1 := a0 + da * float(k + 1) / float(steps)
+		var d0 := Vector3(cos(f0), 0, sin(f0))
+		var d1 := Vector3(cos(f1), 0, sin(f1))
+		var c := Vector3(cx, 0, cz)
+		_tri(fill, corner, c + d0 * r + Vector3(0, yf, 0), c + d1 * r + Vector3(0, yf, 0), Vector3.UP)
+		var ro := r
+		var ri := r - KERB_W
+		var o0 := c + d0 * ro
+		var o1 := c + d1 * ro
+		var i0 := c + d0 * ri
+		var i1 := c + d1 * ri
+		var up := Vector3(0, KERB_H, 0)
+		_tri(ring, o0 + up, o1 + up, i1 + up, Vector3.UP)
+		_tri(ring, o0 + up, i1 + up, i0 + up, Vector3.UP)
+		var dm := (d0 + d1).normalized()
+		_tri(ring, o0 + up, o1 + up, o1, dm)                    # wall towards the road
+		_tri(ring, o0 + up, o1, o0, dm)
+		_tri(ring, i0 + up, i1 + up, i1, -dm)                   # wall towards the pavement
+		_tri(ring, i0 + up, i1, i0, -dm)
+	_blob(fill.commit(), Vector3.ZERO, _mat(ROAD), self)
+	_blob(ring.commit(), Vector3.ZERO, _mat(KERB), self)
 
 
 ## Tree: trunk and a rounded crown made of two spheres; size and green vary with k
@@ -314,6 +370,9 @@ func _build_scene() -> void:
 		for sz in [-1.0, 1.0]:
 			_box(Vector3(klen, KERB_H, KERB_W), Vector3(float(sx) * (k0 + klen / 2.0), KERB_H / 2.0, float(sz) * (HALF + KERB_W / 2.0)), kerb, null)
 			_box(Vector3(KERB_W, KERB_H, klen), Vector3(float(sx) * (HALF + KERB_W / 2.0), KERB_H / 2.0, float(sz) * (k0 + klen / 2.0)), kerb, null)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			_kerb_corner(float(sx), float(sz))
 	# vehicle detector loops (stop-line side of each arm)
 	var loops := {"XTD11": Vector3(-9.5, 0.06, 2.0), "XTD12": Vector3(9.5, 0.06, -2.0),
 		"XTD21": Vector3(-2.0, 0.06, -9.5), "XTD22": Vector3(2.0, 0.06, 9.5)}
@@ -476,8 +535,10 @@ func _make_car(cid: int) -> Node3D:
 	var head := _mat(Color(1.0, 1.0, 0.8))
 	var tail := _mat(Color(0.7, 0.05, 0.05))
 	for hz in [-0.62, 0.62]:
-		_sphere(0.12, Vector3(CAR_LEN / 2.0 - 0.1, 0.66, float(hz)), head, root)
-		_sphere(0.1, Vector3(-CAR_LEN / 2.0 + 0.1, 0.66, float(hz)), tail, root)
+		var hl := _sphere(0.12, Vector3(CAR_LEN / 2.0 - 0.05, 0.66, float(hz)), head, root)
+		var tl := _sphere(0.1, Vector3(-CAR_LEN / 2.0 + 0.05, 0.66, float(hz)), tail, root)
+		hl.scale = Vector3(FLAT, 1.0, 1.3)                         # lamps lie flat on the car front / rear
+		tl.scale = Vector3(FLAT, 1.0, 1.3)
 	add_child(root)
 	return root
 
