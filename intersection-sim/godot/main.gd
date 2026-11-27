@@ -256,6 +256,7 @@ func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> vo
 	if first:
 		# request acknowledged (yellow lamp on top) and push button (box on the pole)
 		var rl := _sphere(0.17, Vector3(0, 3.5, 0), _mat(Color(1.0, 0.85, 0.1).darkened(0.7)), root)
+		rl.scale = Vector3(1.0, 1.0, FLAT)                           # flat lens facing the crosswalk like the other lamps
 		if not req_lamps.has(group):
 			req_lamps[group] = []
 		req_lamps[group].append(rl)
