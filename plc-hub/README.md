@@ -26,7 +26,8 @@ clients.
 * **Dead simulation:** every simulation writes a heartbeat (about every 0.3 s).  Without heartbeat for `heartbeat_timeout_s`
   (1 s) the simulation counts as dead: its sim -> PLC tags go to their **default value (0 / false) with bad quality**
   (`BadNoCommunication`) until it is back (also before it has started).  A hung simulation loop is detected the same way.
-  A PLC read of such a tag gets the bad status (CODESYS: check the quality, or rely on the default value 0).
+  A PLC read of such a tag gets the bad status.  Observed with the CODESYS Data Source Manager (confirmed by the user): the PLC variables
+  freeze at their last value (the default value is not applied) and the Data Source Manager shows that the data is not current.
 * **"PLC connected":** the hub counts the OPC UA sessions that are not simulations (the simulations identify themselves by the
   session name `plchub-sim:<name>`); `Hub/PlcClients` (ns=3) is what the simulations use for their "no PLC" behaviour (e.g. the
   table levels itself).  Any other OPC UA client (UaExpert ...) counts as a PLC client too.
@@ -72,4 +73,5 @@ simulations in hub mode controlled by one PLC connection.
 
 ## Status
 
-Confirmed by the user with a real PLC: one data source connection controls all simulations in parallel through the hub.
+Confirmed by the user with a real PLC: one data source connection controls all simulations in parallel through the hub; when a simulation
+stops, its variables freeze and the Data Source Manager flags the data as not current (accepted).
