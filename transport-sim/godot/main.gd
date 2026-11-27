@@ -251,8 +251,12 @@ func _build(g: Dictionary) -> void:
 		_add_ejector_leds(x, "E%d" % (k + 1))
 		# "item in front of ejector" sensor: bracket on the -Z side, sensor head above the ejection position
 		var bx := x - 0.14
-		_box(Vector3(0.03, 0.32, 0.03), Vector3(bx, 0.15, -BELT_W / 2.0 - 0.04), frame_mat)
-		_box(Vector3(0.03, 0.03, BELT_W / 2.0 + 0.06), Vector3(bx, 0.31, -BELT_W / 4.0 - 0.01), frame_mat)
+		# post (top flush with the top of the arm) and the arm along Z: back end flush with the post's back face,
+		# front end flush with the arm along X
+		var z_back := -BELT_W / 2.0 - 0.04 - 0.015
+		var z_front := 0.015
+		_box(Vector3(0.03, 0.335, 0.03), Vector3(bx, 0.1575, -BELT_W / 2.0 - 0.04), frame_mat)
+		_box(Vector3(0.03, 0.03, z_front - z_back), Vector3(bx, 0.31, (z_back + z_front) / 2.0), frame_mat)
 		_box(Vector3(0.14 + 0.03, 0.03, 0.03), Vector3(x - 0.07, 0.31, 0.0), frame_mat)
 		var lamp := _box(Vector3(0.08, 0.05, 0.08), Vector3(x, 0.27, 0.0), _mat(METAL, 0.5))
 		front_lamps.append(lamp)
