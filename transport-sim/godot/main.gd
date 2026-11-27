@@ -663,24 +663,32 @@ func _caption(text: String, pos: Vector3) -> void:
 	world.add_child(lab)
 
 
-## Motor: command LED (T_YH1n, start) and running LED (T_XGH1n) above the motor, side by side along `axis`.
+## Dark panel lying on top of a cylinder (sunk in a little so it sits on the housing); `size` is (x, z) in metres.
+func _led_panel(cyl_pos: Vector3, size: Vector2) -> void:
+	_box(Vector3(size.x, 0.012, size.y), cyl_pos + Vector3(0, 0.056, 0), _mat(Color(0.25, 0.3, 0.4), 0.3))
+
+
+## Motor: panel on top of the motor with the command LED (T_YH1n, start) and the running LED (T_XGH1n),
+## side by side along `axis` (the motor's axis).
 func _add_motor_leds(motor_pos: Vector3, axis: Vector3, label: String) -> void:
-	var p := motor_pos + Vector3(0, 0.15, 0)
-	motor_leds.append([_led_node(p - axis * 0.035), _led_node(p + axis * 0.035)])
-	_caption(label, p + Vector3(0, 0.08, 0))
+	_led_panel(motor_pos, Vector2(0.12, 0.07) if axis == Vector3.RIGHT else Vector2(0.07, 0.12))
+	var p := motor_pos + Vector3(0, 0.072, 0)
+	motor_leds.append([_led_node(p - axis * 0.032), _led_node(p + axis * 0.032)])
+	_caption(label, motor_pos + Vector3(0, 0.16, 0))
 
 
 ## Ejector: small panel on top of the cylinder housing with the command row (T_YH2n extend, T_YL2n retract)
 ## and the feedback row (T_XGH2n extended, T_XGL2n retracted).
 func _add_ejector_leds(x: float, label: String) -> void:
 	var zc := -BELT_W / 2.0 - 0.3
-	_box(Vector3(0.14, 0.012, 0.13), Vector3(x, 0.156, zc), _mat(Color(0.25, 0.3, 0.4), 0.3))
+	var hp := Vector3(x, 0.08, zc)                       # point on the housing axis
+	_led_panel(hp, Vector2(0.14, 0.13))
 	var l: Array = []
 	for row in 2:
 		for col in 2:
-			l.append(_led_node(Vector3(x - 0.032 + 0.064 * col, 0.172, zc - 0.035 + 0.07 * row)))
+			l.append(_led_node(hp + Vector3(-0.032 + 0.064 * col, 0.072, -0.035 + 0.07 * row)))
 	ej_leds.append(l)
-	_caption(label, Vector3(x, 0.26, zc))
+	_caption(label, hp + Vector3(0, 0.16, 0))
 
 
 func _b(v) -> String:
