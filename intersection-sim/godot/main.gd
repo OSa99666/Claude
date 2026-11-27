@@ -263,6 +263,65 @@ func _ped_head(x: float, z: float, face: Vector3, group: int) -> void:
 	btn_nodes[group].append(bb)
 
 
+## Flat triangle (pointing wherever `v` says, 3 Vector2 in the sign plane) at depth z, visible from the front (+z) or the back (-z)
+func _flat_tri(parent: Node3D, v: Array, z: float, mat: Material, front := true) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var a: Vector2 = v[0]
+	var b: Vector2 = v[1]
+	var c: Vector2 = v[2]
+	_tri(st, Vector3(a.x, a.y, z), Vector3(b.x, b.y, z), Vector3(c.x, c.y, z), Vector3(0, 0, 1.0 if front else -1.0))
+	_blob(st.commit(), Vector3.ZERO, mat, parent)
+
+
+func _sign_root(x: float, z: float, face: Vector3, pole_h: float) -> Node3D:
+	var root := Node3D.new()
+	root.position = Vector3(x, 0, z)
+	root.rotation.y = atan2(face.x, face.z)
+	add_child(root)
+	_cyl(0.045, pole_h, Vector3(0, pole_h / 2.0, 0), _mat(METAL, 1.0, 0.5), root)
+	return root
+
+
+## Pedestrian crossing sign: blue square, white triangle, pedestrian pictogram (faces `face` = towards the approaching traffic)
+func _ped_sign(x: float, z: float, face: Vector3) -> void:
+	var root := _sign_root(x, z, face, 2.5)
+	var c := Vector3(0, 2.5, 0)
+	_box(Vector3(0.7, 0.7, 0.05), c, _mat(Color(0.1, 0.3, 0.7)), root)
+	var plate := Node3D.new()                                   # sign plane: everything else is placed relative to the plate centre
+	plate.position = c
+	root.add_child(plate)
+	_flat_tri(plate, [Vector2(-0.3, -0.28), Vector2(0.3, -0.28), Vector2(0.0, 0.3)], 0.03, _mat(Color(0.95, 0.95, 0.95)))
+	var ink := _mat(Color(0.05, 0.05, 0.08))
+	var head := _sphere(0.045, Vector3(0.0, 0.17, 0.05), ink, plate)
+	head.scale = Vector3(1.0, 1.0, 0.3)
+	var torso := _caps(0.035, 0.24, Vector3(0.0, 0.05, 0.05), ink, plate)
+	torso.scale = Vector3(1.0, 1.0, 0.3)
+	for sgn in [-1.0, 1.0]:
+		var arm := _caps(0.022, 0.2, Vector3(float(sgn) * 0.07, 0.07, 0.05), ink, plate)
+		arm.rotation_degrees = Vector3(0, 0, -float(sgn) * 25.0)
+		arm.scale = Vector3(1.0, 1.0, 0.3)
+		var leg := _caps(0.026, 0.24, Vector3(float(sgn) * 0.045, -0.14, 0.05), ink, plate)
+		leg.rotation_degrees = Vector3(0, 0, -float(sgn) * 12.0)
+		leg.scale = Vector3(1.0, 1.0, 0.3)
+
+
+## Yield (give way) sign: red-bordered white triangle pointing down
+func _yield_sign(x: float, z: float, face: Vector3) -> void:
+	var root := _sign_root(x, z, face, 2.4)
+	var plate := Node3D.new()
+	plate.position = Vector3(0, 2.4, 0)
+	root.add_child(plate)
+	var outer := [Vector2(-0.45, 0.4), Vector2(0.45, 0.4), Vector2(0.0, -0.4)]
+	var cen := Vector2(0.0, 0.1333)
+	var inner := []
+	for o in outer:
+		inner.append(cen + (o - cen) * 0.62)
+	_flat_tri(plate, outer, 0.03, _mat(Color(0.8, 0.05, 0.05)))
+	_flat_tri(plate, inner, 0.04, _mat(Color(0.95, 0.95, 0.95)))
+	_flat_tri(plate, outer, 0.0, _mat(Color(0.5, 0.5, 0.52)), false)     # back of the sign
+
+
 ## Triangle with an explicit normal; the winding is chosen so that it is a front face (Godot: clockwise seen from outside)
 func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3) -> void:
 	if (b - a).cross(c - a).dot(n) > 0.0:
@@ -392,6 +451,14 @@ func _build_scene() -> void:
 	_ped_head(-PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
 	_ped_head(PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2)
 	_ped_head(PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
+	# pedestrian crossing signs: one per crosswalk, on the driver's right before the crosswalk, facing the approaching traffic
+	_ped_sign(-5.6, -9.2, Vector3(0, 0, -1))
+	_ped_sign(5.6, 9.2, Vector3(0, 0, 1))
+	_ped_sign(-9.2, 5.6, Vector3(-1, 0, 0))
+	_ped_sign(9.2, -5.6, Vector3(1, 0, 0))
+	# yield signs for direction 1 (both arms, beyond the signal poles)
+	_yield_sign(-14.5, 5.6, Vector3(-1, 0, 0))
+	_yield_sign(14.5, -5.6, Vector3(1, 0, 0))
 	_label3d("Direction 1", Vector3(-ROAD_HALF * 0.55, 1.2, -1.5))
 	_label3d("Direction 2", Vector3(2.5, 1.2, ROAD_HALF * 0.55))
 	# avenues: a row of trees on either side of both roads, beyond the signal poles
