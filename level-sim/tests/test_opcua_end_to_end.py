@@ -39,7 +39,7 @@ async def scenario():
         N = lambda n: c.get_node(ua.NodeId(n, idx))
         for n in ("T_FCV10", "T_LT10"):
             assert await N(n).read_data_type_as_variant_type() == ua.VariantType.Int16
-        for n in ("T_LSH10", "T_LSL10"):
+        for n in ("T_LSH10", "T_LSL10", "T_LSHH10"):
             assert await N(n).read_data_type_as_variant_type() == ua.VariantType.Boolean
 
         async def lt():
@@ -56,6 +56,7 @@ async def scenario():
         assert await N("T_LSL10").read_value() is False                 # left the low mark
         await asyncio.sleep(2.5)
         assert await lt() >= 32000 - 100 and await N("T_LSH10").read_value() is True   # full
+        assert await N("T_LSHH10").read_value() is True                                 # still filling: spilling over the rim
         await N("T_FCV10").write_value(ua.DataValue(ua.Variant(0, ua.VariantType.Int16)))
         await asyncio.sleep(2.5)                                        # inflow dies away (2nd-order block)
         # UI: manual override and set level
@@ -65,6 +66,7 @@ async def scenario():
         await asyncio.sleep(0.3)
         assert abs(await lt() - 16000) < 400
         assert await N("T_LSH10").read_value() is False
+        assert await N("T_LSHH10").read_value() is False
         # manual valve overrides the PLC command
         send_ui(manual_on=True, manual_u=100.0, set_level_seq=1, set_level=50.0)
         await asyncio.sleep(1.5)

@@ -17,3 +17,4 @@ Same pattern as `../ballplate-sim`, `../valve-sim`, `../transport-sim` (read the
   camera block identical to the other sims.  WRITTEN WITHOUT RUNNING GODOT - the user checks it.
 - Tests: `python -m pytest -q` in `level-sim` (13 pass).  Never put passwords/tokens in the repo.
 - Vessel is OPEN at the top (user request): level > 100 % spills (`spilled`, `q_over`, `overflowing` in `process.py`, state keys `q_over/spilled/overflow`); Godot shows a rim ring, wall stream, puddle, HUD line.  Elbow of the inlet pipe closed with a sphere.  Not run in Godot.
+- Overflow Bool `T_LSHH10` (sim->PLC, user request; name chosen by me, follows the T_LSx10 pattern) = `proc.overflowing`.

@@ -1,6 +1,6 @@
 """Level simulator main loop: process model + OPC UA server + Godot UI link.
 
-    PLC (OPC UA client) --T_FCV10--> [this process] --T_LT10, T_LSH10, T_LSL10--> PLC
+    PLC (OPC UA client) --T_FCV10--> [this process] --T_LT10, T_LSH10, T_LSL10, T_LSHH10--> PLC
                                         ^   |
                 UDP commands (port 9877) |   v UDP state (port 9876)
                                         Godot UI / 3D view
@@ -120,7 +120,7 @@ class Simulator:
         self.proc.step(self.cycle, u)
         self.t += self.cycle
         self.lt_raw = self.pct_to_raw(self.proc.measured)
-        await self.server.write_feedbacks(self.lt_raw, self.proc.lsh, self.proc.lsl)
+        await self.server.write_feedbacks(self.lt_raw, self.proc.lsh, self.proc.lsl, self.proc.overflowing)
         self.send_visual()
 
     async def run(self):

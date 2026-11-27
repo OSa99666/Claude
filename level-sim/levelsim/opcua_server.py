@@ -4,6 +4,7 @@
     written by the simulator (-> PLC)          T_LT10   Int16  level transmitter, 0..raw_full = 0..100 %
                                                T_LSH10  Bool   high level switch (level reached the high mark)
                                                T_LSL10  Bool   low level switch  (level reached the low mark)
+                                               T_LSHH10 Bool   overflow: the vessel is spilling over the rim
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ SIM_TO_PLC = {
     "T_LT10": ("Vessel system output: level transmitter", ua.VariantType.Int16),
     "T_LSH10": ("Vessel high level switch", ua.VariantType.Boolean),
     "T_LSL10": ("Vessel low level switch", ua.VariantType.Boolean),
+    "T_LSHH10": ("Vessel overflow (spilling over the rim)", ua.VariantType.Boolean),
 }
 
 
@@ -77,11 +79,12 @@ class SimServer:
     async def read_valve_raw(self) -> int:
         return int(await self.nodes["T_FCV10"].read_value())
 
-    async def write_feedbacks(self, lt_raw: int, lsh: bool, lsl: bool):
+    async def write_feedbacks(self, lt_raw: int, lsh: bool, lsl: bool, overflow: bool = False):
         """Write only changed values (a subscription reports changes anyway)."""
         vals = {"T_LT10": (int(lt_raw), ua.VariantType.Int16),
                 "T_LSH10": (bool(lsh), ua.VariantType.Boolean),
-                "T_LSL10": (bool(lsl), ua.VariantType.Boolean)}
+                "T_LSL10": (bool(lsl), ua.VariantType.Boolean),
+                "T_LSHH10": (bool(overflow), ua.VariantType.Boolean)}
         for name, (val, vt) in vals.items():
             if self._last.get(name) != val:
                 await self.nodes[name].write_value(ua.DataValue(ua.Variant(val, vt)))

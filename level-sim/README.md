@@ -22,9 +22,10 @@ same controller exercises can be done against it.
 | `T_LT10` | Int16 | sim → PLC | level transmitter, raw `0..32000` = 0..100 % (includes the measurement noise) |
 | `T_LSH10` | Bool | sim → PLC | high level switch: true when the level has **reached** the high mark (default 80 %), released below mark - hysteresis |
 | `T_LSL10` | Bool | sim → PLC | low level switch: true when the level has **reached** the low mark (default 20 %, i.e. level <= mark); option *LSL inverted* makes it true while the level is above the mark (a "covered" sensor) |
+| `T_LSHH10` | Bool | sim → PLC | overflow: true while the open vessel spills over the rim (level at 100 % and inflow > outflow; held 0.2 s) |
 
 CODESYS addresses given by the user: `T_FCV10 %Qw258`, `T_LT10 %Iw258`, `T_LSH10`/`T_LSL10` both written `%I60.0`
-(presumably `%I60.0` and `%I60.1`).  `raw_full = 32000` is in `config/level.toml` `[scaling]`.  With no PLC connected the
+(presumably `%I60.0` and `%I60.1`); `T_LSHH10` is new (suggest `%I60.2`).  `raw_full = 32000` is in `config/level.toml` `[scaling]`.  With no PLC connected the
 valve is closed (the manual override in the panel still works).
 
 ## Process model (`levelsim/process.py`)
