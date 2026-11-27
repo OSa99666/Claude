@@ -9,7 +9,7 @@ extends Node3D
 ## Direction 1 = west-east road, direction 2 = north-south road (model x = east, model y = south = Godot z).
 ## Traffic lights show what is really lit (command and lamp not broken); a broken lamp gets an orange diamond.
 ## Yellow lamp at a pedestrian light post = request acknowledged by the PLC (I_YPDnA), orange box = push button pressed,
-## orange loops on the road = vehicle detectors.  I_XF (hardware fault) = box at the top, a collision = crash ball in the middle.
+## orange loops on the road = vehicle detectors.  I_XF (hardware fault) = box at the top; a collision shows as red cars.
 ##
 ## Run:  godot --path godot -- [--port 9878] [--cmd-port 9879]
 
