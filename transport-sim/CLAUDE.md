@@ -15,7 +15,7 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
   user checks visual changes).  Decisions made with the user: motors are cylinders (T1 motor beside conveyor 1);
   item-in-front sensors hang above the ejection positions; the gate detector lamp takes the item colour (off for
   untreated type 5, which has no detector bit and runs to store 1 - intended); all detectors/motors show the metal
-  colour (`METAL`) when off; ejector rod (round, cylinder) and housing are 0.5 m so the piston stays inside when extended; pusher plate has the rod's metal colour.
+  colour (`METAL`) when off; ejector rod (round, cylinder) and housing are 0.5 m so the piston stays inside when extended; pusher plate (rounded corners, generated mesh `_rounded_plate_mesh`) has the rod's metal colour.
 - Not verified: the real PLC link / CODESYS program for this simulation; `ejector_travel_to_end` assumed true.
 - Tests: `python -m pytest -q` in `transport-sim` (8 pass).  Never put passwords/tokens in the repo.
 - Motors: running colour = the type-2 item green (`_tc(2)`), metal when stopped.

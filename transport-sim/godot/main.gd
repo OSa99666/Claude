@@ -241,7 +241,11 @@ func _build(g: Dictionary) -> void:
 		rod_cyl.material_override = rod_mat
 		rod_cyl.rotation_degrees = Vector3(90, 0, 0)
 		rod.add_child(rod_cyl)
-		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.26), rod_mat, rod)
+		var plate := MeshInstance3D.new()
+		plate.mesh = _rounded_plate_mesh(0.18, 0.15, 0.02, 0.035, 6)
+		plate.material_override = rod_mat
+		plate.position = Vector3(0, 0, 0.26)
+		rod.add_child(plate)
 		plate.name = "plate"
 		rods.append(rod)
 		_add_ejector_leds(x, "E%d" % (k + 1))
@@ -642,6 +646,56 @@ func _spawn_fall(n: int, item_id: int, speed: float) -> void:
 	world.add_child(mi)
 	fall_items.append({"node": mi, "store": n, "id": item_id, "pos": end_pos[n], "dir": end_dir[n],
 			"speed": speed, "vy": 0.0, "angle": 0.0})
+
+
+## Flat plate w x h (x, y), thickness t along z, with rounded corners of radius r (segs segments per corner).
+## Godot winds front faces clockwise, hence the vertex orders below.
+func _rounded_plate_mesh(w: float, h: float, t: float, r: float, segs: int) -> ArrayMesh:
+	var pts: Array[Vector2] = []
+	var nrm: Array[Vector2] = []
+	var centres := [Vector2(w / 2.0 - r, h / 2.0 - r), Vector2(-w / 2.0 + r, h / 2.0 - r),
+			Vector2(-w / 2.0 + r, -h / 2.0 + r), Vector2(w / 2.0 - r, -h / 2.0 + r)]
+	for c in 4:
+		for i in segs + 1:
+			var a := (float(c) + float(i) / float(segs)) * PI / 2.0
+			var d := Vector2(cos(a), sin(a))
+			pts.append(centres[c] + d * r)
+			nrm.append(d)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := pts.size()
+	var zf := t / 2.0
+	var zb := -t / 2.0
+	for i in n:
+		var j := (i + 1) % n
+		# front cap (+z), back cap (-z)
+		st.set_normal(Vector3(0, 0, 1))
+		st.add_vertex(Vector3(0, 0, zf))
+		st.add_vertex(Vector3(pts[j].x, pts[j].y, zf))
+		st.add_vertex(Vector3(pts[i].x, pts[i].y, zf))
+		st.set_normal(Vector3(0, 0, -1))
+		st.add_vertex(Vector3(0, 0, zb))
+		st.add_vertex(Vector3(pts[i].x, pts[i].y, zb))
+		st.add_vertex(Vector3(pts[j].x, pts[j].y, zb))
+		# side wall between point i and j (smooth normals)
+		var ni := Vector3(nrm[i].x, nrm[i].y, 0)
+		var nj := Vector3(nrm[j].x, nrm[j].y, 0)
+		var dl := Vector3(pts[i].x, pts[i].y, zf)
+		var al := Vector3(pts[i].x, pts[i].y, zb)
+		var bl := Vector3(pts[j].x, pts[j].y, zb)
+		var cl := Vector3(pts[j].x, pts[j].y, zf)
+		st.set_normal(ni)
+		st.add_vertex(dl)
+		st.set_normal(nj)
+		st.add_vertex(cl)
+		st.add_vertex(bl)
+		st.set_normal(ni)
+		st.add_vertex(dl)
+		st.set_normal(nj)
+		st.add_vertex(bl)
+		st.set_normal(ni)
+		st.add_vertex(al)
+	return st.commit()
 
 
 ## One indicator LED (sphere) at `pos`; coloured and glowing when on, metal when off.
