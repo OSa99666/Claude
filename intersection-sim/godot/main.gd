@@ -349,21 +349,83 @@ func _ped_pos(cw: String, u: float, d: int) -> Vector3:
 	return Vector3(mid, 0, a)
 
 
+func _spow(v: float, e: float) -> float:
+	return signf(v) * pow(absf(v), e)
+
+
+## Rounded box: superellipsoid with half sizes a (x), b (z), c (y); exponents < 1 give a box with rounded edges, 1 an ellipsoid.
+func _superellipsoid(a: float, b: float, c: float, e1: float, e2: float, n_lat := 14, n_lon := 32) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pts: Array = []
+	var nrm: Array = []
+	for i in n_lat + 1:
+		var th := -PI / 2.0 + PI * float(i) / float(n_lat)
+		for j in n_lon + 1:
+			var ph := -PI + TAU * float(j) / float(n_lon)
+			pts.append(Vector3(a * _spow(cos(th), e1) * _spow(cos(ph), e2), c * _spow(sin(th), e1), b * _spow(cos(th), e1) * _spow(sin(ph), e2)))
+			var n := Vector3(_spow(cos(th), 2.0 - e1) * _spow(cos(ph), 2.0 - e2) / a, _spow(sin(th), 2.0 - e1) / c, _spow(cos(th), 2.0 - e1) * _spow(sin(ph), 2.0 - e2) / b)
+			nrm.append(n.normalized() if n.length() > 0.00001 else Vector3.UP)
+	var w := n_lon + 1
+	for i in n_lat:
+		for j in n_lon:
+			var i00 := i * w + j
+			var i01 := i * w + j + 1
+			var i10 := (i + 1) * w + j
+			var i11 := (i + 1) * w + j + 1
+			for tri in [[i00, i01, i11], [i00, i11, i10]]:
+				var t0: int = tri[0]
+				var t1: int = tri[1]
+				var t2: int = tri[2]
+				var v0: Vector3 = pts[t0]
+				var v1: Vector3 = pts[t1]
+				var v2: Vector3 = pts[t2]
+				if (v1 - v0).cross(v2 - v0).dot(nrm[t0]) > 0.0:       # Godot: clockwise seen from outside = front face
+					var tmp := t1
+					t1 = t2
+					t2 = tmp
+				for idx in [t0, t1, t2]:
+					st.set_normal(nrm[idx])
+					st.add_vertex(pts[idx])
+	return st.commit()
+
+
+func _blob(mesh: Mesh, pos: Vector3, mat: Material, parent: Node3D) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+	return mi
+
+
+var car_body_mesh: ArrayMesh
+var car_cabin_mesh: ArrayMesh
+var car_glass_mesh: ArrayMesh
+
+
 func _make_car(cid: int) -> Node3D:
+	if car_body_mesh == null:
+		car_body_mesh = _superellipsoid(CAR_LEN / 2.0, CAR_W / 2.0, 0.38, 0.35, 0.3)
+		car_cabin_mesh = _superellipsoid(1.15, 0.82, 0.34, 0.5, 0.5)
+		car_glass_mesh = _superellipsoid(1.2, 0.86, 0.16, 0.5, 0.5)
 	var root := Node3D.new()
 	var mat := _mat(CAR_COLS[cid % CAR_COLS.size()], 1.0, 0.3)
 	root.set_meta("mat", mat)
 	root.set_meta("col", CAR_COLS[cid % CAR_COLS.size()])
-	_box(Vector3(CAR_LEN, 0.7, CAR_W), Vector3(0, 0.6, 0), mat, root)
-	_box(Vector3(2.4, 0.6, CAR_W - 0.2), Vector3(-0.3, 1.25, 0), mat, root)
-	_box(Vector3(0.05, 0.4, CAR_W - 0.5), Vector3(0.9, 1.25, 0), _mat(Color(0.15, 0.2, 0.3)), root)      # windscreen
+	_blob(car_body_mesh, Vector3(0, 0.62, 0), mat, root)
+	_blob(car_cabin_mesh, Vector3(-0.3, 1.18, 0), mat, root)
+	_blob(car_glass_mesh, Vector3(-0.28, 1.2, 0), _mat(Color(0.12, 0.17, 0.25), 1.0, 0.2), root)        # window band
 	var wheel := _mat(Color(0.08, 0.08, 0.08))
 	for wx in [-1.4, 1.4]:
-		for wz in [-0.85, 0.85]:
+		for wz in [-0.88, 0.88]:
 			var w := _cyl(0.32, 0.25, Vector3(float(wx), 0.32, float(wz)), wheel, root)
 			w.rotation_degrees = Vector3(90, 0, 0)
-	_box(Vector3(0.05, 0.18, 0.4), Vector3(CAR_LEN / 2.0, 0.6, 0.6), _mat(Color(1.0, 1.0, 0.8)), root)   # headlights
-	_box(Vector3(0.05, 0.18, 0.4), Vector3(CAR_LEN / 2.0, 0.6, -0.6), _mat(Color(1.0, 1.0, 0.8)), root)
+	var head := _mat(Color(1.0, 1.0, 0.8))
+	var tail := _mat(Color(0.7, 0.05, 0.05))
+	for hz in [-0.62, 0.62]:
+		_sphere(0.12, Vector3(CAR_LEN / 2.0 - 0.1, 0.66, float(hz)), head, root)
+		_sphere(0.1, Vector3(-CAR_LEN / 2.0 + 0.1, 0.66, float(hz)), tail, root)
 	add_child(root)
 	return root
 
@@ -374,16 +436,26 @@ const SKINS := [Color(0.95, 0.78, 0.65), Color(0.8, 0.6, 0.45), Color(0.55, 0.38
 const HAIRS := [Color(0.1, 0.08, 0.06), Color(0.35, 0.22, 0.1), Color(0.75, 0.6, 0.3), Color(0.5, 0.5, 0.5)]
 
 
-## limb that swings about its top: a pivot at `pos` with a box hanging down from it
-func _limb(parent: Node3D, pos: Vector3, size: Vector3, mat: Material) -> Node3D:
+func _caps(r: float, h: float, pos: Vector3, mat: Material, parent: Node3D) -> MeshInstance3D:
+	var m := CapsuleMesh.new()
+	m.radius = r
+	m.height = maxf(h, 2.0 * r)
+	m.radial_segments = 16
+	m.rings = 6
+	return _blob(m, pos, mat, parent)
+
+
+## limb that swings about its top: a pivot at `pos` with a capsule of length `len` hanging down from it
+func _limb(parent: Node3D, pos: Vector3, r: float, len: float, mat: Material) -> Node3D:
 	var pivot := Node3D.new()
 	pivot.position = pos
 	parent.add_child(pivot)
-	_box(size, Vector3(0, -size.y / 2.0, 0), mat, pivot)
+	_caps(r, len, Vector3(0, -len / 2.0, 0), mat, pivot)
 	return pivot
 
 
-## A person (about 1.8 m): head with hair, torso, two arms and two legs that swing while walking.  Local +x = walking direction.
+## A person (about 1.8 m) from rounded parts: head with hair, torso, arms with hands, legs with shoes; the limbs swing
+## while walking.  Local +x = walking direction.
 func _make_ped(pid: int) -> Node3D:
 	var root := Node3D.new()
 	var shirt_col: Color = SHIRTS[pid % SHIRTS.size()]
@@ -391,17 +463,28 @@ func _make_ped(pid: int) -> Node3D:
 	var trousers := _mat(TROUSERS[(pid * 7) % TROUSERS.size()])
 	var skin := _mat(SKINS[(pid * 5) % SKINS.size()])
 	var hair := _mat(HAIRS[(pid * 3) % HAIRS.size()])
+	var shoe := _mat(Color(0.1, 0.08, 0.07))
 	root.set_meta("shirt", shirt)
 	root.set_meta("shirt_col", shirt_col)
-	_box(Vector3(0.22, 0.55, 0.4), Vector3(0, 1.2, 0), shirt, root)
-	_cyl(0.05, 0.1, Vector3(0, 1.52, 0), skin, root)                              # neck
-	_sphere(0.12, Vector3(0, 1.68, 0), skin, root)                                # head
-	var cap := _sphere(0.125, Vector3(-0.02, 1.72, 0), hair, root)                # hair
+	var torso := _caps(0.2, 0.66, Vector3(0, 1.2, 0), shirt, root)
+	torso.scale = Vector3(0.62, 1.0, 1.0)
+	_cyl(0.05, 0.1, Vector3(0, 1.55, 0), skin, root)                              # neck
+	_sphere(0.12, Vector3(0, 1.69, 0), skin, root)                                # head
+	var cap := _sphere(0.128, Vector3(-0.02, 1.72, 0), hair, root)                # hair
 	cap.scale = Vector3(1.0, 0.75, 1.0)
-	root.set_meta("legL", _limb(root, Vector3(0, 0.93, -0.1), Vector3(0.15, 0.93, 0.15), trousers))
-	root.set_meta("legR", _limb(root, Vector3(0, 0.93, 0.1), Vector3(0.15, 0.93, 0.15), trousers))
-	root.set_meta("armL", _limb(root, Vector3(0, 1.45, -0.26), Vector3(0.1, 0.6, 0.1), shirt))
-	root.set_meta("armR", _limb(root, Vector3(0, 1.45, 0.26), Vector3(0.1, 0.6, 0.1), shirt))
+	var leg_l := _limb(root, Vector3(0, 0.93, -0.1), 0.075, 0.93, trousers)
+	var leg_r := _limb(root, Vector3(0, 0.93, 0.1), 0.075, 0.93, trousers)
+	for leg in [leg_l, leg_r]:
+		var sh := _sphere(0.09, Vector3(0.05, -0.88, 0), shoe, leg)
+		sh.scale = Vector3(1.5, 0.6, 0.9)
+	var arm_l := _limb(root, Vector3(0, 1.46, -0.27), 0.055, 0.62, shirt)
+	var arm_r := _limb(root, Vector3(0, 1.46, 0.27), 0.055, 0.62, shirt)
+	for arm in [arm_l, arm_r]:
+		_sphere(0.06, Vector3(0, -0.64, 0), skin, arm)                            # hand
+	root.set_meta("legL", leg_l)
+	root.set_meta("legR", leg_r)
+	root.set_meta("armL", arm_l)
+	root.set_meta("armR", arm_r)
 	add_child(root)
 	return root
 
