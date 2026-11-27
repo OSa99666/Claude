@@ -1,0 +1,26 @@
+# Heated jacketed water tank (MIMO state-space model, level and temperature) for MPC experiments
+#
+# [opcua] mode "hub": all simulations share ONE OPC UA server (plc-hub, port 4840, ns=2), started by the first simulation.
+# mode "standalone": this simulation runs its own server on `endpoint` (tests / development).
+
+[opcua]
+mode          = "hub"
+endpoint      = "opc.tcp://0.0.0.0:4845"
+namespace_uri = "urn:jacketsim:simulation"
+publishing_interval_cap_ms = 20      # standalone mode only (the hub has its own setting)
+# username = "plc"
+# password = "change-me"
+
+[sim]
+cycle_ms = 10
+seed = 0                             # random measurement noise: 0 = different every start, else repeatable
+
+# Defaults for values that can be changed live in the Godot UI (CODESYS block names in comments)
+[model]
+sample_time_s = 1.0                  # PTSDT  the state-space model is stepped once per sample time (outputs hold in between)
+
+[visual]
+host         = "127.0.0.1"   # where Godot listens for state (UDP)
+port         = 9880
+command_port = 9881          # where the simulator listens for Godot's UI commands
+enabled      = true

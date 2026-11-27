@@ -142,6 +142,18 @@ MANIFEST = {
             "I_XF": ("Boolean", "Intersection fault (hardware error of the traffic light system, e.g. broken lamp)"),
         },
     },
+    "jacket": {
+        "folder": "JacketTank",
+        "title": "Heated jacketed water tank (MIMO state-space model, level and temperature) for MPC",
+        "plc_to_sim": {
+            "M_YR01": ("Int16", "Control value: heater power (0-32767 = 0-100 %)"),
+            "M_YR02": ("Int16", "Control value: level / inflow (0-32767 = 0-1.0)"),
+        },
+        "sim_to_plc": {
+            "M_XG01": ("Int16", "Process value: temperature (0-32767 = 20-120 degC)"),
+            "M_XG02": ("Int16", "Process value: level (0-32767 = 0.1-0.9 m)"),
+        },
+    },
 }
 
 

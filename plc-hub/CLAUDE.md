@@ -1,13 +1,13 @@
 # Project context: plc-hub (common OPC UA server of all simulations)
 
-User decisions (this session): ONE OPC UA server for all simulations - port 4840, all tags in the same namespace ns=2; simulations are
+User decisions (this session): ONE OPC UA server for all (six) simulations - port 4840, all tags in the same namespace ns=2; simulations are
 started separately and talk to it; the first simulation starts it and it runs until the last one has stopped; there is a single PLC
 with ONE connection.  Dead simulation -> its tags default value + bad quality.  Stop delay configurable (`stop_delay_s`, default 30 s).
 Shared hub package (not copied into each simulation).
 
 - Design chosen after a prototype measurement (see README): hub = separate detached process (NOT inside the first simulation, whose exit
   would kill the PLC connection), simulations = OPC UA clients via `plchub.client.HubLink` with decoupled I/O task.
-- `plchub/manifest.py` is the single tag list (92 tags, generated once from the simulations' own lists; test keeps them equal).
+- `plchub/manifest.py` is the single tag list (96 tags, generated once from the simulations' own lists; test keeps them equal).
 - Diagnostics in ns=3.  Bad-quality default values are stored directly in the address space (asyncua nulls bad values otherwise).
 - Simulations: `[opcua] mode = "hub"|"standalone"`; each simulation's `opcua_server.py` has both paths (`HubNode` stand-ins make the
   existing read/write code work unchanged).  Mock PLCs: `plchub.config.plc_target(cfg)` + `plchub.mock_support.tolerate_bad_quality()`.

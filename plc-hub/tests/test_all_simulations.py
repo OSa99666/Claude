@@ -1,4 +1,4 @@
-"""All five real simulations in hub mode at the same time, one PLC client with ONE connection controlling all of them."""
+"""All six real simulations in hub mode at the same time, one PLC client with ONE connection controlling all of them."""
 import asyncio
 import importlib
 
@@ -9,7 +9,7 @@ from plchub import config
 from conftest import TEST_PORT
 
 HUB = {"port": TEST_PORT, "stop_delay_s": 1.0, "heartbeat_timeout_s": 0.6, "log_file": "logs/test-hub.log"}
-SIMS = [("ballplate", 49901), ("valvesim", 49902), ("transportsim", 49903), ("levelsim", 49904), ("intersectionsim", 49905)]
+SIMS = [("ballplate", 49901), ("valvesim", 49902), ("transportsim", 49903), ("levelsim", 49904), ("intersectionsim", 49905), ("jacketsim", 49906)]
 
 
 def make(pkg, cmd_port):
@@ -24,13 +24,15 @@ def make(pkg, cmd_port):
         cfg["valve"].update(transit_to_high_s=0.6, transit_to_low_s=0.6, action_delay_from_low_s=0.1, action_delay_from_high_s=0.1)
     if pkg == "levelsim":
         cfg["process"].update(delay_s=0.0, outlet_pct=0.0, start_level=15.0, fn_hz=1.0, zeta=0.7, k_acc=0.5)
+    if pkg == "jacketsim":
+        cfg["model"]["sample_time_s"] = 0.1
     if pkg == "intersectionsim":
         for k in ("rate_w", "rate_e", "rate_n", "rate_s", "ped_rate_1", "ped_rate_2"):
             cfg["traffic"][k] = 0.0
     return simm.Simulator(cfg)
 
 
-def test_one_plc_connection_controls_all_five_simulations():
+def test_one_plc_connection_controls_all_six_simulations():
     async def scenario():
         sims = [make(p, port) for p, port in SIMS]
         tasks = [asyncio.create_task(s.run()) for s in sims]
@@ -62,7 +64,7 @@ def test_one_plc_connection_controls_all_five_simulations():
                     await asyncio.sleep(0.1)
                 raise AssertionError("%s did not reach the expected value (last %r)" % (tag, await val(tag)))
 
-            for t in ("F_XG10", "V_XGL", "T_LT10", "T_LSL10", "I_XTL1R", "T_XGH11"):   # every simulation is up and writing
+            for t in ("F_XG10", "V_XGL", "T_LT10", "T_LSL10", "I_XTL1R", "T_XGH11", "M_XG01"):   # every simulation is up and writing
                 await until(t, lambda v: True)
             # ballplate: tilt X -> acceleration / velocity of the ball
             await N("F_YR10").write_value(I(16000))
@@ -81,6 +83,9 @@ def test_one_plc_connection_controls_all_five_simulations():
             # intersection: green lamp command -> lamp feedback
             await N("I_YTL1G").write_value(B(True))
             await until("I_XTL1G", lambda v: v is True)
+            # jacketed tank: heater full on -> the temperature rises
+            await N("M_YR01").write_value(I(32767))
+            await until("M_XG01", lambda v: v > 17500)
             # one PLC connection only
             plc_clients = await c.get_node(ua.NodeId("PlcClients", await c.get_namespace_index(config.merge(HUB)["diag_namespace_uri"]))).read_value()
             assert plc_clients == 1

@@ -1,7 +1,7 @@
 # plc-hub - the common OPC UA server of all simulations
 
-One OPC UA server for **all five simulations** (`ballplate-sim`, `valve-sim`, `transport-sim`, `level-sim`, `intersection-sim`):
-**port 4840**, all 92 tags in **namespace ns=2** (`urn:plcdemo:simulation`, string node ids = the PLC tag names).  The PLC needs
+One OPC UA server for **all six simulations** (`ballplate-sim`, `valve-sim`, `transport-sim`, `level-sim`, `intersection-sim`, `jacket-sim`):
+**port 4840**, all 96 tags in **namespace ns=2** (`urn:plcdemo:simulation`, string node ids = the PLC tag names).  The PLC needs
 **one** data source connection; the simulations are started separately, each in its own process, and talk to the hub as OPC UA
 clients.
 
@@ -9,7 +9,7 @@ clients.
  PLC (CODESYS, ONE OPC UA client)        Linux PC
 ┌────────────────────┐  OPC UA 4840  ┌──────────────────────────┐   OPC UA (localhost)   ┌──────────────────────┐
 │ Data Source Manager│──────────────►│ plc-hub  (own process)   │◄──────────────────────►│ ballplate-sim        │
-└────────────────────┘               │ ns=2: 92 tags            │◄──────────────────────►│ valve-sim            │
+└────────────────────┘               │ ns=2: 96 tags            │◄──────────────────────►│ valve-sim            │
                                      │ ns=3: diagnostics        │◄──────────────────────►│ transport-sim  ...   │
                                      └──────────────────────────┘                        └──────────────────────┘
 ```
@@ -53,13 +53,13 @@ clients.
   the cached last PLC value, `write_value()` only queues; a background task does batched writes of changed values, a 10 ms subscription
   to the PLC's tags and the heartbeat, so the network never blocks the simulation cycle); `plchub/launcher.py` (find / start the hub);
   `plchub/subscription_tweaks.py` is now the **single** copy of the asyncua patches (cap, ModifySubscription, publish statistics) - the
-  five per-simulation copies are only used in standalone mode.
+  per-simulation copies are only used in standalone mode.
 * The hub stores a dead simulation's *default value with bad quality* directly in the address space (asyncua's normal write path would
   null the value of a bad-quality data value) and uses a few asyncua internals (`iserver._external_sessions`, address space attributes);
   tests cover them - re-check after an asyncua upgrade.
 * No access control: the PLC could overwrite a simulation's output tags and the other way round (as before).
 
-## Measured (prototype, 4 cores, five simulations at 100 Hz each doing a batched exchange, one PLC subscribed at 20 ms)
+## Measured (prototype, 4 cores, six simulations at 100 Hz each doing a batched exchange, one PLC subscribed at 20 ms)
 
 Latency simulation write -> PLC notification median 9 ms / p99 13.5 ms (in-process server: 6.5 / 12.8 ms); exchange per simulation cycle
 median 2-3 ms (decoupled from the cycle by `HubLink`); the hub used about 56 % of one core in that worst case (polling reads, every
@@ -68,7 +68,7 @@ output changing every cycle); five separate servers used about 42 % in total.
 ## Tests
 
 `python -m pytest -q` in `plc-hub` (needs `../*-sim` on the path, done by `pytest.ini`): manifest, hub lifecycle (first start, shared hub,
-stop delay, restart, foreign server on the port), data both ways, dead simulation quality, PLC vs simulation sessions, and all five real
+stop delay, restart, foreign server on the port), data both ways, dead simulation quality, PLC vs simulation sessions, and all six real
 simulations in hub mode controlled by one PLC connection.
 
 ## Status
