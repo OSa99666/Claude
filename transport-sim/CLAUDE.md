@@ -27,5 +27,5 @@ shared findings: CODESYS 1000 ms publishing-interval issue and `publishing_inter
 - Godot camera (all three, identical code block at the end of `godot/main.gd`): arrows pan, Shift+arrows orbit, +/- zoom, Home reset,
   middle-drag pan.  Keys are only used if they reach `_unhandled_input` (a focused UI field keeps them).  Not run in Godot yet - user checks.
 - CODESYS: subscription time must match the DatasourcesTasks cycle (40 ms needs 10 ms) or the DSM falls back to 1000 ms (see ballplate-sim/CLAUDE.md).
-- LEDs (like the valve): per motor a panel with command + running LED (sits on top of the motor), per ejector 2x2 LEDs directly on the housing at its back end (commands row, feedbacks row), green = High, yellow = Low, metal = off;
+- LEDs (like the valve): per motor command + running LED sitting directly on top of the motor, per ejector 2x2 LEDs directly on the housing at its back end (commands row, feedbacks row), green = High, yellow = Low, metal = off;
   `_led_node/_led/_caption/_add_motor_leds/_add_ejector_leds` in `godot/main.gd`.  Not run in Godot - user checks.
