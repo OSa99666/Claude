@@ -8,11 +8,19 @@ simulation: own launch file, own config, own ports - it can run next to the othe
  PLC (OPC UA client)             Linux PC
 ┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9872 state   ┌──────────────────────┐
 │ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view + UI  │
-│ Data Source Mgr  │ port 4841 │ valve model, server     │◄──────────────────│ parameters, commands │
+│ Data Source Mgr  │ port 4840 │ valve model, server     │◄──────────────────│ parameters, commands │
 └──────────────────┘           └─────────────────────────┘  UDP 9873 UI      └──────────────────────┘
 ```
 
-## IO (OPC UA, namespace `urn:valvesim:simulation`, folder `Valve`, string node ids, all Bool)
+## Common OPC UA server (hub)
+
+All simulations share **one** OPC UA server, the **hub** (`../plc-hub`): port **4840**, all tags in namespace **ns=2**
+(`urn:plcdemo:simulation`), so a single PLC data source connection controls every simulation.  The first simulation that runs starts
+the hub (detached); it stops `stop_delay_s` (default 30 s) after the last simulation has stopped.  While this simulation is not
+running its tags show their default value with **bad quality**.  `mode = "standalone"` in `[opcua]` of the config gives this
+simulation its own server on `endpoint` instead (tests, development).  Details: `../plc-hub/README.md`.
+
+## IO (OPC UA, namespace `urn:plcdemo:simulation` (ns=2, common hub), folder `Valve`, string node ids, all Bool)
 
 | Variable | Direction | Meaning |
 |---|---|---|
@@ -48,7 +56,7 @@ Four indicator LEDs sit on the valve actuator, with labels: the upper row shows 
 
 ```bash
 ./run.sh                 # simulator + mock PLC (opens/closes the valve) + Godot; creates .venv on first run
-./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4841
+./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4840 (the common hub)
 ./run.sh --no-godot      # headless
 ./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
@@ -56,7 +64,7 @@ pytest                                  # 9 tests incl. a real OPC UA round trip
 ```
 
 Connecting CODESYS: same procedure as for the rolling table (`../ballplate-sim/codesys/README.md`), with
-the Bool variables above and port 4841.  `publishing_interval_cap_ms = 20` in `config/valve.toml` serves
+the Bool variables above and port 4840 (hub).  `publishing_interval_cap_ms = 20` in `config/valve.toml` serves
 a client that insists on 1000 ms faster.
 
 Note: the CODESYS Data Source Manager falls back to a 1000 ms update rate if the connection's subscription time and the

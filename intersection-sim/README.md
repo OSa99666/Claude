@@ -2,18 +2,26 @@
 
 A road intersection with vehicles and pedestrians, simulated in Python and shown in Godot (3D).  The **PLC** (CODESYS)
 controls the traffic lights and pedestrian lights over OPC UA and gets lamp feedback, vehicle detectors, pedestrian push buttons and an
-intersection fault.  **Standalone**: own launcher, config and ports (OPC UA 4844, UDP 9878/9879), like the other four demos.
+intersection fault.  **Standalone**: own launcher, config and ports (OPC UA via the hub on 4840, UDP 9878/9879), like the other four demos.
 It re-creates the existing CODESYS intersection simulation (picture supplied by the user) with moving traffic.
 
 ```
  PLC (OPC UA client)             Linux PC
 ┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9878 state   ┌──────────────────────┐
 │ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view +     │
-│ Data Source Mgr  │ port 4844 │ traffic model, server   │◄──────────────────│ traffic / fault UI   │
+│ Data Source Mgr  │ port 4840 │ traffic model, server   │◄──────────────────│ traffic / fault UI   │
 └──────────────────┘           └─────────────────────────┘  UDP 9879 UI      └──────────────────────┘
 ```
 
-## IO (OPC UA, namespace `urn:intersectionsim:simulation`, folder `Intersection`, string node ids = the tag names, all Bool, 29 variables)
+## Common OPC UA server (hub)
+
+All simulations share **one** OPC UA server, the **hub** (`../plc-hub`): port **4840**, all tags in namespace **ns=2**
+(`urn:plcdemo:simulation`), so a single PLC data source connection controls every simulation.  The first simulation that runs starts
+the hub (detached); it stops `stop_delay_s` (default 30 s) after the last simulation has stopped.  While this simulation is not
+running its tags show their default value with **bad quality**.  `mode = "standalone"` in `[opcua]` of the config gives this
+simulation its own server on `endpoint` instead (tests, development).  Details: `../plc-hub/README.md`.
+
+## IO (OPC UA, namespace `urn:plcdemo:simulation` (ns=2, common hub), folder `Intersection`, string node ids = the tag names, all Bool, 29 variables)
 
 PLC → simulator (12):
 
@@ -71,7 +79,7 @@ Manager mapping they should be unique, for example:
 ```bash
 ./run.sh                 # simulator + mock PLC (fixed-time two-phase signals) + Godot; creates .venv on first run
 ./run.sh --green 15      # mock PLC: vehicle green time per direction in s
-./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4844
+./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4840 (the common hub)
 ./run.sh --no-godot      # headless
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
 pytest                                  # 15 tests incl. a real OPC UA round trip

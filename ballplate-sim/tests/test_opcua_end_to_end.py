@@ -22,6 +22,7 @@ def send_ui(**kw):
 
 async def scenario():
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["opcua"]["endpoint"] = EP
     cfg["visual"].update(enabled=False, command_port=CMD_PORT)
     sim = Simulator(cfg)

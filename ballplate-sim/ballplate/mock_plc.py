@@ -13,10 +13,12 @@ import math
 import time
 
 from asyncua import Client, ua
+from plchub import config as hubcfg, mock_support
 
 from . import config as cfgmod
 from .scaling import from_raw, to_raw
 
+mock_support.tolerate_bad_quality()      # a tag of a simulation that is not running reads 0 instead of raising
 log = logging.getLogger("mock_plc")
 
 
@@ -54,11 +56,12 @@ async def main_async(a):
     cfg = cfgmod.load(a.config)
     sc = cfg["scaling"]
     rm, d_m, tilt = sc["raw_max"], sc["dist_m"], sc["tilt_deg"]
-    url = a.url or "opc.tcp://127.0.0.1:4840"
+    url0, ns_uri = hubcfg.plc_target(cfg)
+    url = a.url or url0
     ctl = {"x": CascadePD(ki=0.15), "y": CascadePD(ki=0.15)}
     dt = 0.01
     async with Client(url) as c:
-        idx = await c.get_namespace_index(cfg["opcua"]["namespace_uri"])
+        idx = await c.get_namespace_index(ns_uri)
         def node(name):
             return c.get_node(ua.NodeId(name, idx))
         n_tx, n_ty = node("F_YR10"), node("F_YR20")

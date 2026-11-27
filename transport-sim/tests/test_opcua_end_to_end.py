@@ -21,6 +21,7 @@ def send_ui(**kw):
 
 async def scenario():
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["opcua"]["endpoint"] = EP
     cfg["visual"].update(enabled=False, command_port=CMD_PORT)
     sim = Simulator(cfg)
@@ -103,6 +104,7 @@ def test_ui_commands_reach_the_model():
     """UI values (feed pattern, faults, buttons) are applied by Simulator.apply_ui without a server."""
     from transportsim.ui_link import UiLink
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["visual"].update(enabled=False)
     sim = Simulator(cfg)
     sim.ui = UiLink()

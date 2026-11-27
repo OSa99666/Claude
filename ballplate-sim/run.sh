@@ -3,7 +3,7 @@
 #
 #   ./run.sh                      simulator + mock PLC (centre) + Godot
 #   ./run.sh --pattern circle     mock PLC drives the ball around a circle (center|circle|square)
-#   ./run.sh --no-mock            real PLC: only simulator + Godot (PLC connects to opc.tcp://<this-pc>:4840)
+#   ./run.sh --no-mock            real PLC: only simulator + Godot (PLC connects to opc.tcp://<this-pc>:4840 (the common hub))
 #   ./run.sh --no-godot           headless (e.g. over SSH): simulator + mock PLC only
 #   ./run.sh --godot /path/to/Godot_v4.3-stable_linux.x86_64
 #   ./run.sh --publish-cap-ms 20  serve OPC UA clients at least every 20 ms even if they ask for 1000 ms
@@ -14,6 +14,8 @@
 
 set -u
 cd "$(dirname "$(readlink -f "$0")")"
+# the common OPC UA server (plc-hub) is started by the first simulation; it needs the shared package on the path
+export PYTHONPATH="$PWD/../plc-hub${PYTHONPATH:+:$PYTHONPATH}"
 
 PATTERN=center; MOCK=1; USE_GODOT=1; GODOT_BIN="${GODOT:-}"; SIM_ARGS=()
 while [ $# -gt 0 ]; do
@@ -37,7 +39,7 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 PY="$VENV/bin/python"
 
-PORT=$("$PY" -c 'import tomllib,sys,urllib.parse as u; c=tomllib.load(open("config/sim.toml","rb")); print(u.urlparse(c["opcua"]["endpoint"]).port or 4840)')
+PORT=$("$PY" -c 'import tomllib,sys,urllib.parse as u; c=tomllib.load(open("config/sim.toml","rb")); H=lambda c,n:(tomllib.load(open("../plc-hub/config/hub.toml","rb")).get("hub",{}).get("port",4840) if c["opcua"].get("mode","hub")=="hub" else (u.urlparse(c["opcua"]["endpoint"]).port or n)); print(H(c,4840))')
 
 # ---------------------------------------------------------------- find Godot
 find_godot() {

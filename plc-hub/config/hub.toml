@@ -1,0 +1,12 @@
+# Common OPC UA server (hub) for all simulations: one endpoint, all tags in namespace ns=2.
+# It is started automatically by the first simulation that runs and stops when the last one has stopped
+# (after stop_delay_s).  The PLC connects to opc.tcp://<this-pc>:<port> with ONE data source connection.
+
+[hub]
+port = 4840
+namespace_uri = "urn:plcdemo:simulation"        # ns=2: all PLC tags (string node ids = tag names)
+diag_namespace_uri = "urn:plcdemo:hub"          # ns=3: hub diagnostics (PlcClients, per simulation Alive / Heartbeat)
+publishing_interval_cap_ms = 20                 # serves slow PLC clients faster; 0 = off (see ballplate-sim README)
+stop_delay_s = 30.0                             # keep running this long after the last simulation has stopped (0 = stop at once)
+heartbeat_timeout_s = 1.0                       # a simulation silent for this long counts as dead: its tags -> default + bad quality
+log_file = "logs/hub.log"                       # relative to plc-hub/ (empty = standard output)

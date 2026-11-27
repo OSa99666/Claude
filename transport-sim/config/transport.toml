@@ -7,6 +7,9 @@
 # Defaults differ from the other simulations (table 4840, valve 4841) so they can run side by side.
 
 [opcua]
+# mode = "hub": all simulations share ONE OPC UA server (plc-hub, port 4840, all tags in ns=2), started automatically by the
+# first simulation.  mode = "standalone": this simulation runs its own server on `endpoint` (used by the tests / development).
+mode          = "hub"
 endpoint      = "opc.tcp://0.0.0.0:4842"
 namespace_uri = "urn:transportsim:simulation"
 publishing_interval_cap_ms = 20      # serves PLC clients that insist on 1000 ms faster; 0 = off

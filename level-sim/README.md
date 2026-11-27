@@ -2,7 +2,7 @@
 
 A vessel filled through a valve, simulated in Python and shown in Godot.  A **PLC** (CODESYS) connects over OPC UA
 like in the other demos (`../ballplate-sim`, `../valve-sim`, `../transport-sim`).  **Standalone**: own launcher,
-config and ports (OPC UA 4843, UDP 9876/9877).  It re-creates the level process of the existing CODESYS simulation
+config and ports (OPC UA via the hub on 4840, UDP 9876/9877).  It re-creates the level process of the existing CODESYS simulation
 (valve, delay, 2nd-order system, accumulator, random oscillations / consumption / noise) as a proper model, so the
 same controller exercises can be done against it.
 
@@ -10,11 +10,19 @@ same controller exercises can be done against it.
  PLC (OPC UA client)             Linux PC
 ┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9876 state   ┌──────────────────────┐
 │ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view,      │
-│ Data Source Mgr  │ port 4843 │ process model, server   │◄──────────────────│ scope, parameters    │
+│ Data Source Mgr  │ port 4840 │ process model, server   │◄──────────────────│ scope, parameters    │
 └──────────────────┘           └─────────────────────────┘  UDP 9877 UI      └──────────────────────┘
 ```
 
-## IO (OPC UA, namespace `urn:levelsim:simulation`, folder `Level`, string node ids)
+## Common OPC UA server (hub)
+
+All simulations share **one** OPC UA server, the **hub** (`../plc-hub`): port **4840**, all tags in namespace **ns=2**
+(`urn:plcdemo:simulation`), so a single PLC data source connection controls every simulation.  The first simulation that runs starts
+the hub (detached); it stops `stop_delay_s` (default 30 s) after the last simulation has stopped.  While this simulation is not
+running its tags show their default value with **bad quality**.  `mode = "standalone"` in `[opcua]` of the config gives this
+simulation its own server on `endpoint` instead (tests, development).  Details: `../plc-hub/README.md`.
+
+## IO (OPC UA, namespace `urn:plcdemo:simulation` (ns=2, common hub), folder `Level`, string node ids)
 
 | Variable | Type | Direction | Meaning |
 |---|---|---|---|
@@ -62,7 +70,7 @@ level h (0..100 %, integrator)  : dh/dt = k_acc * (inflow - outflow),   outflow 
 ```bash
 ./run.sh                 # simulator + mock PLC (on/off on the switches) + Godot; creates .venv on first run
 ./run.sh --mode pi --setpoint 60     # mock PLC as PI controller on T_LT10
-./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4843
+./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4840 (the common hub)
 ./run.sh --no-godot      # headless
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
 pytest                                  # 14 tests incl. a real OPC UA round trip

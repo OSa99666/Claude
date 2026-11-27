@@ -12,11 +12,13 @@ import logging
 import time
 
 from asyncua import Client, ua
+from plchub import config as hubcfg, mock_support
 
 from . import config as cfgmod
 from .io import PLC_BOOL, PLC_INT, SIM_BOOL
 from .transport import COLOURS
 
+mock_support.tolerate_bad_quality()      # a tag of a simulation that is not running reads 0 instead of raising
 log = logging.getLogger("mock_plc")
 TYPE_OF = {v: k for k, v in COLOURS.items()}
 
@@ -122,9 +124,10 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logging.getLogger("asyncua").setLevel(logging.WARNING)
     cfg = cfgmod.load()
-    url = a.url or "opc.tcp://127.0.0.1:%d" % int(cfg["opcua"]["endpoint"].rsplit(":", 1)[1])
+    url0, ns_uri = hubcfg.plc_target(cfg)
+    url = a.url or url0
     try:
-        asyncio.run(run(url, cfg["opcua"]["namespace_uri"], a.speed))
+        asyncio.run(run(url, ns_uri, a.speed))
     except KeyboardInterrupt:
         pass
 

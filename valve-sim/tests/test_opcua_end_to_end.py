@@ -19,6 +19,7 @@ def send_ui(**kw):
 
 async def scenario():
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["opcua"]["endpoint"] = EP
     cfg["visual"].update(enabled=False, command_port=CMD_PORT)
     cfg["valve"].update(transit_to_high_s=0.6, transit_to_low_s=0.6,

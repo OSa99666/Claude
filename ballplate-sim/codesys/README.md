@@ -1,12 +1,13 @@
 # CODESYS side (Raspberry Pi)
 
-The **simulator is the OPC UA server** (default `opc.tcp://<pc-ip>:4840`).  The PLC connects to it as an
+The OPC UA server is the **common hub** of all simulations (`../../plc-hub`, `opc.tcp://<pc-ip>:4840`, started by the first
+simulation that runs).  The PLC connects to it as an
 OPC UA *client*, for example through the CODESYS **Data Source Manager**, and maps the simulator's
 variables onto the IO words in `gIo`.
 
 ## Variables exposed by the simulator
 
-Namespace URI `urn:ballplate:simulation` (index differs per client - browse for it), folder `Ballplate`,
+Namespace URI `urn:plcdemo:simulation` (ns=2 for all simulations), folder `Simulations/Ballplate`,
 node ids are the string names below.  All variables are **Int16 (INT)**.
 
 | Variable | Direction | Raw range | Meaning |
@@ -25,12 +26,13 @@ Godot UI, not over OPC UA.
 
 ## Connecting
 
-1. Start the simulator on the PC (`python -m ballplate.sim`).  Make sure TCP 4840 is reachable from the Pi
+1. Start the simulator on the PC (`./run.sh`, which also starts the hub if no other simulation did).  Make sure TCP 4840 is reachable from the Pi
    (firewall: `sudo firewall-cmd --add-port=4840/tcp` on Fedora, `sudo ufw allow 4840/tcp` on Ubuntu).
 2. In CODESYS add the OPC UA connection in the Data Source Manager, endpoint `opc.tcp://<pc-ip>:4840`,
    security *None* / anonymous for the first test (set `username`/`password` in `config/sim.toml` to require a login),
    and map the eight variables to `gIo.F_YR10 ... gIo.F_XG22`.
-3. With **no client connected** the simulator keeps the table level (fail-safe).
+3. With **no PLC connected** the simulator keeps the table level (fail-safe).  One connection serves all simulations running on the hub;
+   the tags of a simulation that is not running show their default value with bad quality.
 
 `PLC_PRG_Example.st` + `FB_BallCtrl.st` are a small PD controller using these words.  They have not been
 compiled in CODESYS; the same algorithm (`CascadePD` in `ballplate/mock_plc.py`) is tested against the simulator.

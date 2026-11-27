@@ -21,6 +21,7 @@ class H:
 
 async def scenario(caplog):
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["opcua"].update(endpoint=EP, publishing_interval_cap_ms=0)   # cap off: honour the client
     cfg["visual"].update(enabled=False, command_port=CMD_PORT)
     sim = Simulator(cfg)
@@ -81,6 +82,7 @@ def test_modify_subscription_is_applied_and_requests_are_logged(caplog):
 
 async def capped_scenario():
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["opcua"].update(endpoint="opc.tcp://127.0.0.1:48557", publishing_interval_cap_ms=20)
     cfg["visual"].update(enabled=False, command_port=49873)
     sim = Simulator(cfg)

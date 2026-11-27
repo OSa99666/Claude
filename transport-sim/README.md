@@ -9,7 +9,7 @@ It is **standalone** (own launcher, config, ports) like `../valve-sim` and `../b
  PLC (OPC UA client)             Linux PC
 ┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9874 state   ┌──────────────────────┐
 │ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view + UI  │
-│ Data Source Mgr  │ port 4842 │ transport model, server │◄──────────────────│ feed, timing, forces │
+│ Data Source Mgr  │ port 4840 │ transport model, server │◄──────────────────│ feed, timing, forces │
 └──────────────────┘           └─────────────────────────┘  UDP 9875 UI      └──────────────────────┘
 ```
 
@@ -21,7 +21,15 @@ It is **standalone** (own launcher, config, ports) like `../valve-sim` and `../b
 Item type 1..4 (blue, green, red, yellow) is meant for ejector 1..4; type 5 (grey, "untreated") has no
 detector bit and runs to store 1.
 
-## IO (OPC UA, namespace `urn:transportsim:simulation`, folder `Transport`, string node ids, 46 variables)
+## Common OPC UA server (hub)
+
+All simulations share **one** OPC UA server, the **hub** (`../plc-hub`): port **4840**, all tags in namespace **ns=2**
+(`urn:plcdemo:simulation`), so a single PLC data source connection controls every simulation.  The first simulation that runs starts
+the hub (detached); it stops `stop_delay_s` (default 30 s) after the last simulation has stopped.  While this simulation is not
+running its tags show their default value with **bad quality**.  `mode = "standalone"` in `[opcua]` of the config gives this
+simulation its own server on `endpoint` instead (tests, development).  Details: `../plc-hub/README.md`.
+
+## IO (OPC UA, namespace `urn:plcdemo:simulation` (ns=2, common hub), folder `Transport`, string node ids, 46 variables)
 
 | Variables | Type | Direction | Meaning |
 |---|---|---|---|
@@ -96,7 +104,7 @@ its cylinder: a command row (`T_YH2n` extend, `T_YL2n` retract) and a feedback r
 
 ```bash
 ./run.sh                 # simulator + mock PLC (sorts the items) + Godot; creates .venv on first run
-./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4842
+./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4840 (the common hub)
 ./run.sh --no-godot      # headless
 ./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
@@ -106,7 +114,7 @@ pytest                                  # 18 tests incl. a real OPC UA round tri
 The mock PLC (`transportsim/mock_plc.py`) tracks the item types from the detector and fires the right
 ejector when the item is in front of it - a minimum example of what the CODESYS program has to do.
 Connecting CODESYS: as for the rolling table (`../ballplate-sim/codesys/README.md`), with the variables above
-and port 4842; `publishing_interval_cap_ms = 20` serves a client that insists on 1000 ms faster.
+and port 4840 (hub); `publishing_interval_cap_ms = 20` serves a client that insists on 1000 ms faster.
 
 Note: the CODESYS Data Source Manager falls back to a 1000 ms update rate if the connection's subscription time and the
 DatasourcesTasks cycle time do not match (e.g. 40 ms needs a 10 ms task) - see `../ballplate-sim/codesys/README.md`.

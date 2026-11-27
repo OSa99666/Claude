@@ -12,7 +12,7 @@ which is also the user interface for the simulation parameters.
 └──────────────────┘           └─────────────────────────┘  UDP 9871 UI      └──────────────────────┘
 ```
 
-Only **eight INT words** go over OPC UA (same names as the PLC's `gIo`; namespace `urn:ballplate:simulation`,
+Only **eight INT words** go over OPC UA (same names as the PLC's `gIo`; namespace `urn:plcdemo:simulation` (ns=2, common hub),
 folder `Ballplate`, server name `Ballplate simulator`, string node ids such as `F_YR10`):
 
 | Variable | Direction | Raw ±32000 means |
@@ -23,6 +23,14 @@ folder `Ballplate`, server name `Ballplate simulator`, string node ids such as `
 | `F_XG12`, `F_XG22` | sim → PLC | ±1 m distance X / Y (centre = 0) |
 
 Scaling lives in `config/sim.toml` (`[scaling]`); the PLC must use the same ranges.
+
+## Common OPC UA server (hub)
+
+All simulations share **one** OPC UA server, the **hub** (`../plc-hub`): port **4840**, all tags in namespace **ns=2**
+(`urn:plcdemo:simulation`), so a single PLC data source connection controls every simulation.  The first simulation that runs starts
+the hub (detached); it stops `stop_delay_s` (default 30 s) after the last simulation has stopped.  While this simulation is not
+running its tags show their default value with **bad quality**.  `mode = "standalone"` in `[opcua]` of the config gives this
+simulation its own server on `endpoint` instead (tests, development).  Details: `../plc-hub/README.md`.
 
 ## Parameters and commands (Godot panel, top right)
 
@@ -74,7 +82,7 @@ mock PLC and Godot; closing the Godot window or Ctrl+C stops all three; logs in 
 ```bash
 ./run.sh                    # simulator + mock PLC (ball held at centre) + Godot
 ./run.sh --pattern circle   # mock PLC drives the ball around a circle (center|circle|square)
-./run.sh --no-mock          # real PLC: simulator + Godot only, PLC connects to opc.tcp://<this-pc>:4840
+./run.sh --no-mock          # real PLC: simulator + Godot only, PLC connects to opc.tcp://<this-pc>:4840 (the common hub)
 ./run.sh --no-godot         # headless, e.g. over SSH
 ./run.sh --godot ~/godot/Godot_v4.3-stable_linux.x86_64   # or GODOT=... ; otherwise godot, godot4,
                                                           # ~/godot/Godot_v*, or the Flatpak is used
@@ -144,7 +152,7 @@ depends on the client; check the values in the PLC.
 ## Sibling simulations
 
 The same pattern (own launcher, config and ports, OPC UA server + Godot view) is used by `../valve-sim`
-(bistable valve, OPC UA port 4841) and `../transport-sim` (conveyor sorting, port 4842); the table uses 4840,
+(bistable valve) and `../transport-sim` (conveyor sorting); all simulations share the common OPC UA server on port 4840 (`../plc-hub`),
 so all of them can run at the same time.
 
 ## Status

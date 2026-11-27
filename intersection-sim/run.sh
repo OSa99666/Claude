@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Start the intersection demo: simulator (OPC UA server) + mock PLC + Godot.  Standalone: no other
-# simulation is needed, and it uses its own ports (OPC UA 4844, UDP 9878/9879).
+# simulation is needed, and it uses its own ports (OPC UA via the common hub on 4840, UDP 9878/9879).
 #
 #   ./run.sh               simulator + mock PLC (fixed-time two-phase signals) + Godot
 #   ./run.sh --green 15    mock PLC: vehicle green time per direction in s
-#   ./run.sh --no-mock     real PLC: only simulator + Godot (PLC connects to opc.tcp://<this-pc>:4844)
+#   ./run.sh --no-mock     real PLC: only simulator + Godot (PLC connects to opc.tcp://<this-pc>:4840 (the common hub))
 #   ./run.sh --no-godot    headless: simulator + mock PLC only
 #   ./run.sh --godot /path/to/Godot_v4.3-stable_linux.x86_64
 #   ./run.sh --publish-cap-ms 20
@@ -14,6 +14,8 @@
 
 set -u
 cd "$(dirname "$(readlink -f "$0")")"
+# the common OPC UA server (plc-hub) is started by the first simulation; it needs the shared package on the path
+export PYTHONPATH="$PWD/../plc-hub${PYTHONPATH:+:$PYTHONPATH}"
 
 GREEN=10; MOCK=1; USE_GODOT=1; GODOT_BIN="${GODOT:-}"; SIM_ARGS=()
 while [ $# -gt 0 ]; do
@@ -36,7 +38,7 @@ if [ ! -x "$VENV/bin/python" ]; then
 fi
 PY="$VENV/bin/python"
 
-eval "$("$PY" -c 'import tomllib,urllib.parse as u; c=tomllib.load(open("config/intersection.toml","rb")); print("PORT=%d UDP_PORT=%d CMD_PORT=%d" % (u.urlparse(c["opcua"]["endpoint"]).port or 4844, c["visual"]["port"], c["visual"]["command_port"]))')"
+eval "$("$PY" -c 'import tomllib,urllib.parse as u; c=tomllib.load(open("config/intersection.toml","rb")); H=lambda c,n:(tomllib.load(open("../plc-hub/config/hub.toml","rb")).get("hub",{}).get("port",4840) if c["opcua"].get("mode","hub")=="hub" else (u.urlparse(c["opcua"]["endpoint"]).port or n)); print("PORT=%d UDP_PORT=%d CMD_PORT=%d" % (H(c,4844), c["visual"]["port"], c["visual"]["command_port"]))')"
 
 find_godot() {
     if [ -n "$GODOT_BIN" ]; then echo "$GODOT_BIN"; return; fi

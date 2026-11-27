@@ -38,11 +38,20 @@ class SimServer:
         self.uri = o["namespace_uri"]
         self.cap_ms = float(o.get("publishing_interval_cap_ms", 0) or 0)
         self._auth = (o.get("username"), o.get("password")) if o.get("username") else None
+        self.mode = o.get("mode", "hub")                  # "hub": common OPC UA server (plc-hub), "standalone": own server
+        self.hub_cfg = cfg.get("hub")
+        self.link = None
         self.server: Server | None = None
         self.nodes: dict[str, object] = {}
         self._last: dict[str, bool] = {}
 
     async def start(self):
+        if self.mode == "hub":
+            from plchub.client import HubLink              # the tags live on the common hub; nodes are cached stand-ins
+            self.link = HubLink("valve", self.hub_cfg)
+            await self.link.start()
+            self.nodes = self.link.nodes
+            return
         subscription_tweaks.apply(self.cap_ms)
         s = Server(user_manager=_Users(*self._auth)) if self._auth else Server()
         await s.init()
@@ -63,10 +72,15 @@ class SimServer:
         log.info("OPC UA server on %s, namespace %d (%s)", self.endpoint, idx, self.uri)
 
     async def stop(self):
+        if self.link:
+            await self.link.stop()
+            return
         if self.server:
             await self.server.stop()
 
     def client_count(self) -> int:
+        if self.link:
+            return 1 if self.link.plc_connected() else 0      # the hub knows whether a PLC is connected
         b = self.server.bserver if self.server else None
         return len(b.clients) if b else 0
 

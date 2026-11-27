@@ -108,8 +108,8 @@ async def identify(url: str) -> bool:
     for e in eps:
         tokens = ",".join(t.TokenType.name for t in (e.UserIdentityTokens or []))
         print(f"  endpoint: {e.SecurityMode.name:16} {e.SecurityPolicyUri.rsplit('#', 1)[-1]:16} login: {tokens}")
-    if "ballplate" not in (srv.ApplicationUri or "").lower() and "ballplate" not in name.lower():
-        print("  !! this does not look like the ballplate simulator (expected name 'Ballplate simulator').")
+    if not any(k in (srv.ApplicationUri or "").lower() + name.lower() for k in ("ballplate", "hub")):
+        print("  !! this does not look like the simulation hub / ballplate simulator (expected name 'PLC simulation hub').")
         print("     Wrong host or port?  Another OPC UA server (e.g. the CODESYS runtime) may be using this port.")
     return True
 
@@ -138,7 +138,7 @@ def main():
     ap.add_argument("--interval", type=float, default=20.0, help="requested publishing/sampling interval, ms (default 20)")
     ap.add_argument("--duration", type=float, default=5.0, help="seconds per measurement (default 5)")
     ap.add_argument("--vars", nargs="+", default=DEFAULT_VARS, help="variable names (default: the six F_XG words)")
-    ap.add_argument("--uri", default="urn:ballplate:simulation", help="namespace uri of the simulator")
+    ap.add_argument("--uri", default="urn:plcdemo:simulation", help="namespace uri (the common hub; ballplate standalone: urn:ballplate:simulation)")
     ap.add_argument("--user")
     ap.add_argument("--password")
     a = ap.parse_args()

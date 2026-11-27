@@ -28,3 +28,4 @@ The third one (conveyor sorting) is `../transport-sim`.
 - Four LEDs on the actuator (command row V_YH/V_YL, feedback row V_XGH/V_XGL; green = High, yellow = Low, metal when off) with Label3D
   captions.  GDScript gotcha: a `var` in a nested block must not reuse a name declared earlier in the enclosing function (e.g. `sm`).
   Not run in Godot - user checks.
+- Common OPC UA server (user decision): all five simulations use ONE hub (`../plc-hub`, port 4840, all tags in ns=2 `urn:plcdemo:simulation`) as OPC UA CLIENTS of it (`HubLink`); `[opcua] mode = "hub"` (default) or `"standalone"` (own server, used by this simulation's tests).  The first simulation starts the hub, it stops 30 s after the last one; a dead simulation's tags -> default + bad quality.  Mock PLCs use `plchub.config.plc_target(cfg)`.  Needs `../plc-hub` on PYTHONPATH (run.sh and pytest.ini do that).

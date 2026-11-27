@@ -15,6 +15,7 @@ CYCLE = 0.01
 
 def make_sim():
     cfg = config.load()
+    cfg["opcua"]["mode"] = "standalone"                 # own server on a test port (the hub mode is tested in plc-hub)
     cfg["visual"].update(enabled=False)
     sim = Simulator(cfg)
     sim.model.reset(0.3, 0.2)
