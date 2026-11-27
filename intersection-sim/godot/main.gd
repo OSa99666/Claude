@@ -45,6 +45,8 @@ const PAVE := Color(0.72, 0.71, 0.68)
 const PAVE_W := 2.5                # pavement width along the road edges
 const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
 const KERB := Color(0.86, 0.86, 0.84)
+const SIGN_H := 2.9                # height of the sign plate centre
+const SIGN_SCALE := 1.45           # size factor of the sign plates (1 = 0.7 m square)
 const FLAT := 0.35                 # thickness of the lamp lenses relative to their diameter
 const CORNER_R := 1.0              # radius of the rounded pavement / kerb corners
 const KERB_W := 0.2
@@ -285,12 +287,12 @@ func _sign_root(x: float, z: float, face: Vector3, pole_h: float) -> Node3D:
 
 ## Pedestrian crossing sign: blue square, white triangle, pedestrian pictogram (faces `face` = towards the approaching traffic)
 func _ped_sign(x: float, z: float, face: Vector3) -> void:
-	var root := _sign_root(x, z, face, 2.5)
-	var c := Vector3(0, 2.5, 0)
-	_box(Vector3(0.7, 0.7, 0.05), c, _mat(Color(0.1, 0.3, 0.7)), root)
-	var plate := Node3D.new()                                   # sign plane: everything else is placed relative to the plate centre
-	plate.position = c
+	var root := _sign_root(x, z, face, SIGN_H)
+	var plate := Node3D.new()                                   # sign plane: everything is placed relative to the plate centre
+	plate.position = Vector3(0, SIGN_H, 0)
+	plate.scale = Vector3(SIGN_SCALE, SIGN_SCALE, SIGN_SCALE)
 	root.add_child(plate)
+	_box(Vector3(0.7, 0.7, 0.05), Vector3.ZERO, _mat(Color(0.1, 0.3, 0.7)), plate)
 	_flat_tri(plate, [Vector2(-0.3, -0.28), Vector2(0.3, -0.28), Vector2(0.0, 0.3)], 0.03, _mat(Color(0.95, 0.95, 0.95)))
 	var ink := _mat(Color(0.05, 0.05, 0.08))
 	var head := _sphere(0.045, Vector3(0.0, 0.17, 0.05), ink, plate)
@@ -299,18 +301,19 @@ func _ped_sign(x: float, z: float, face: Vector3) -> void:
 	torso.scale = Vector3(1.0, 1.0, 0.3)
 	for sgn in [-1.0, 1.0]:
 		var arm := _caps(0.022, 0.2, Vector3(float(sgn) * 0.07, 0.07, 0.05), ink, plate)
-		arm.rotation_degrees = Vector3(0, 0, -float(sgn) * 25.0)
+		arm.rotation_degrees = Vector3(0, 0, float(sgn) * 25.0)         # hanging down, hands pointing outwards
 		arm.scale = Vector3(1.0, 1.0, 0.3)
 		var leg := _caps(0.026, 0.24, Vector3(float(sgn) * 0.045, -0.14, 0.05), ink, plate)
-		leg.rotation_degrees = Vector3(0, 0, -float(sgn) * 12.0)
+		leg.rotation_degrees = Vector3(0, 0, float(sgn) * 12.0)         # feet slightly apart
 		leg.scale = Vector3(1.0, 1.0, 0.3)
 
 
 ## Yield (give way) sign: red-bordered white triangle pointing down
 func _yield_sign(x: float, z: float, face: Vector3) -> void:
-	var root := _sign_root(x, z, face, 2.4)
+	var root := _sign_root(x, z, face, SIGN_H)
 	var plate := Node3D.new()
-	plate.position = Vector3(0, 2.4, 0)
+	plate.position = Vector3(0, SIGN_H, 0)
+	plate.scale = Vector3(SIGN_SCALE, SIGN_SCALE, SIGN_SCALE)
 	root.add_child(plate)
 	var outer := [Vector2(-0.45, 0.4), Vector2(0.45, 0.4), Vector2(0.0, -0.4)]
 	var cen := Vector2(0.0, 0.1333)
