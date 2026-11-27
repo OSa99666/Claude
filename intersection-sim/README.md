@@ -62,7 +62,7 @@ Manager mapping they should be unique, for example:
   starts to cross when the pedestrian light is green (feedback) and no car is about to reach the crosswalk.
 * **Collision** (not an IO): two vehicles of different directions overlap (e.g. both lights green), a vehicle hits a pedestrian, or a vehicle runs into the
   one in front in its own lane (rear-end: the follower stops at the rear of the car in front, no overlap, both turn red).  The vehicles stay
-  as wrecks with a crash smiley; it stays latched until *Clear collision* in the panel (the PLC only sees the effect on the detectors).
+  as wrecks; they stay red until the collision is cleared; the crash is latched until *Clear collision* in the panel (the PLC only sees the effect on the detectors).
 * Scoreboard (in the HUD): vehicles passed, average wait, queues, pedestrians crossed / average wait, red-light violations, crashes.
 * Faults for the exercises (panel): broken lamps (feedback reads false, drivers see a dark lamp), detectors dead / stuck, push buttons stuck.
 

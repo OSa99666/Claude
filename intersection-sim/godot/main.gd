@@ -75,7 +75,6 @@ var req_lamps := {}                 # group -> Array of yellow request lamps
 var btn_nodes := {}                 # group -> Array of push button boxes
 var car_nodes := {}                 # id -> Node3D
 var ped_nodes := {}                 # id -> Node3D (person)
-var crash_ball := Node3D.new()
 
 var yaw := 0.6
 var pitch := 0.75
@@ -237,7 +236,7 @@ func _traffic_head(x: float, z: float, face: Vector3, group: int) -> void:
 		_add_broken_mark(nm, root, p + Vector3(0, 0, 0.12))
 
 
-func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> void:
+func _ped_head(x: float, z: float, face: Vector3, group: int) -> void:
 	var steel := _mat(METAL, 1.0, 0.5)
 	var root := Node3D.new()
 	root.position = Vector3(x, 0, z)
@@ -253,17 +252,15 @@ func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> vo
 	bulb_g.scale = Vector3(1.0, 1.0, FLAT)
 	_add_broken_mark(rn, root, Vector3(0, 3.0, 0.27))
 	_add_broken_mark(gn, root, Vector3(0, 2.4, 0.27))
-	if first:
-		# request acknowledged (yellow lamp on top) and push button (box on the pole)
-		var rl := _sphere(0.17, Vector3(0, 3.5, 0), _mat(Color(1.0, 0.85, 0.1).darkened(0.7)), root)
-		rl.scale = Vector3(1.0, 1.0, FLAT)                           # flat lens facing the crosswalk like the other lamps
-		if not req_lamps.has(group):
-			req_lamps[group] = []
-		req_lamps[group].append(rl)
-		var bb := _box(Vector3(0.18, 0.18, 0.1), Vector3(0, 1.3, 0.1), _mat(Color(0.45, 0.45, 0.45)), root)
-		if not btn_nodes.has(group):
-			btn_nodes[group] = []
-		btn_nodes[group].append(bb)
+	# request acknowledged: yellow lamp in a box on top of the pole; push button on the pole (identical on every pedestrian pole)
+	var rl := _box(Vector3(0.34, 0.26, 0.34), Vector3(0, 3.46, 0), _mat(Color(1.0, 0.85, 0.1).darkened(0.7)), root)
+	if not req_lamps.has(group):
+		req_lamps[group] = []
+	req_lamps[group].append(rl)
+	var bb := _box(Vector3(0.18, 0.18, 0.1), Vector3(0, 1.3, 0.1), _mat(Color(0.45, 0.45, 0.45)), root)
+	if not btn_nodes.has(group):
+		btn_nodes[group] = []
+	btn_nodes[group].append(bb)
 
 
 ## Triangle with an explicit normal; the winding is chosen so that it is a front face (Godot: clockwise seen from outside)
@@ -387,28 +384,16 @@ func _build_scene() -> void:
 	_traffic_head(POLE_OFF, 10.5, Vector3(0, 0, 1), 2)
 	# pedestrian lights at the ends of every crosswalk (facing the crosswalk)
 	# (beside the crosswalk on its outer side, at the kerb, facing across the road)
-	_ped_head(-POLE_OFF, -PED_POLE_S, Vector3(1, 0, 0), 1, true)
-	_ped_head(POLE_OFF, -PED_POLE_S, Vector3(-1, 0, 0), 1, false)
-	_ped_head(-POLE_OFF, PED_POLE_S, Vector3(1, 0, 0), 1, false)
-	_ped_head(POLE_OFF, PED_POLE_S, Vector3(-1, 0, 0), 1, false)
-	_ped_head(-PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2, true)
-	_ped_head(-PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2, false)
-	_ped_head(PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2, false)
-	_ped_head(PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2, false)
+	_ped_head(-POLE_OFF, -PED_POLE_S, Vector3(1, 0, 0), 1)
+	_ped_head(POLE_OFF, -PED_POLE_S, Vector3(-1, 0, 0), 1)
+	_ped_head(-POLE_OFF, PED_POLE_S, Vector3(1, 0, 0), 1)
+	_ped_head(POLE_OFF, PED_POLE_S, Vector3(-1, 0, 0), 1)
+	_ped_head(-PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2)
+	_ped_head(-PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
+	_ped_head(PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2)
+	_ped_head(PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
 	_label3d("Direction 1", Vector3(-ROAD_HALF * 0.55, 1.2, -1.5))
 	_label3d("Direction 2", Vector3(2.5, 1.2, ROAD_HALF * 0.55))
-	# crash ball (yellow, with a face) above the crossing
-	var yb := _sphere(1.6, Vector3(0, 3.2, 0), _mat(Color(1.0, 0.8, 0.1)), crash_ball)
-	var face := Label3D.new()
-	face.text = "x  x\n  _"
-	face.font_size = 64
-	face.pixel_size = 0.02
-	face.modulate = Color(0.2, 0.2, 0.1)
-	face.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	face.position = Vector3(0, 3.2, 1.7)
-	crash_ball.add_child(face)
-	crash_ball.visible = false
-	add_child(crash_ball)
 	# avenues: a row of trees on either side of both roads, beyond the signal poles
 	var ts := 16.0
 	var tk := 0
@@ -851,7 +836,6 @@ func _process(delta: float) -> void:
 			(ped_nodes[pid] as Node3D).queue_free()
 			ped_nodes.erase(pid)
 
-	crash_ball.visible = bool(msg.get("crash", false))
 	fault_box.visible = bool(msg.get("hw_fault", false))
 	var s: Dictionary = msg.get("stats", {})
 	var q2: Dictionary = msg.get("queue", {})
