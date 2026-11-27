@@ -45,6 +45,7 @@ const PAVE := Color(0.72, 0.71, 0.68)
 const PAVE_W := 2.5                # pavement width along the road edges
 const PAVE_H := 0.09               # pavement top height (road top is at 0.03)
 const KERB := Color(0.86, 0.86, 0.84)
+const SIGN_OFF := 7.2              # signs stand on the lawn: this far from the road centre line (the pavement ends at 6.5)
 const SIGN_H := 2.9                # height of the sign plate centre
 const SIGN_SCALE := 1.45           # size factor of the sign plates (1 = 0.7 m square)
 const FLAT := 0.35                 # thickness of the lamp lenses relative to their diameter
@@ -454,14 +455,14 @@ func _build_scene() -> void:
 	_ped_head(-PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
 	_ped_head(PED_POLE_S, -POLE_OFF, Vector3(0, 0, 1), 2)
 	_ped_head(PED_POLE_S, POLE_OFF, Vector3(0, 0, -1), 2)
-	# pedestrian crossing signs: one per crosswalk, on the driver's right before the crosswalk, facing the approaching traffic
-	_ped_sign(-5.6, -9.2, Vector3(0, 0, -1))
-	_ped_sign(5.6, 9.2, Vector3(0, 0, 1))
-	_ped_sign(-9.2, 5.6, Vector3(-1, 0, 0))
-	_ped_sign(9.2, -5.6, Vector3(1, 0, 0))
+	# pedestrian crossing signs: one per crosswalk, on the lawn on the driver's right before the crosswalk, facing the approaching traffic
+	_ped_sign(-SIGN_OFF, -9.2, Vector3(0, 0, -1))
+	_ped_sign(SIGN_OFF, 9.2, Vector3(0, 0, 1))
+	_ped_sign(-9.2, SIGN_OFF, Vector3(-1, 0, 0))
+	_ped_sign(9.2, -SIGN_OFF, Vector3(1, 0, 0))
 	# yield signs for direction 1 (both arms, beyond the signal poles)
-	_yield_sign(-14.5, 5.6, Vector3(-1, 0, 0))
-	_yield_sign(14.5, -5.6, Vector3(1, 0, 0))
+	_yield_sign(-14.5, SIGN_OFF, Vector3(-1, 0, 0))
+	_yield_sign(14.5, -SIGN_OFF, Vector3(1, 0, 0))
 	_label3d("Direction 1", Vector3(-ROAD_HALF * 0.55, 1.2, -1.5))
 	_label3d("Direction 2", Vector3(2.5, 1.2, ROAD_HALF * 0.55))
 	# avenues: a row of trees on either side of both roads, beyond the signal poles
