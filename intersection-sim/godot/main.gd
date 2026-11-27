@@ -62,7 +62,7 @@ var det_nodes := {}                 # detector name -> MeshInstance3D
 var req_lamps := {}                 # group -> Array of yellow request lamps
 var btn_nodes := {}                 # group -> Array of push button boxes
 var car_nodes := {}                 # id -> Node3D
-var ped_nodes := {}                 # id -> MeshInstance3D
+var ped_nodes := {}                 # id -> Node3D (person)
 var crash_ball := Node3D.new()
 
 var yaw := 0.6
@@ -368,15 +368,42 @@ func _make_car(cid: int) -> Node3D:
 	return root
 
 
-func _make_ped() -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var m := CapsuleMesh.new()
-	m.radius = 0.22
-	m.height = 1.7
-	mi.mesh = m
-	mi.material_override = _mat(Color(0.1, 0.1, 0.5))
-	add_child(mi)
-	return mi
+const SHIRTS := [Color(0.75, 0.2, 0.2), Color(0.2, 0.45, 0.75), Color(0.9, 0.75, 0.2), Color(0.3, 0.65, 0.35), Color(0.85, 0.85, 0.85), Color(0.6, 0.3, 0.6)]
+const TROUSERS := [Color(0.15, 0.17, 0.3), Color(0.25, 0.22, 0.2), Color(0.35, 0.4, 0.5), Color(0.1, 0.1, 0.1)]
+const SKINS := [Color(0.95, 0.78, 0.65), Color(0.8, 0.6, 0.45), Color(0.55, 0.38, 0.28), Color(0.38, 0.26, 0.2)]
+const HAIRS := [Color(0.1, 0.08, 0.06), Color(0.35, 0.22, 0.1), Color(0.75, 0.6, 0.3), Color(0.5, 0.5, 0.5)]
+
+
+## limb that swings about its top: a pivot at `pos` with a box hanging down from it
+func _limb(parent: Node3D, pos: Vector3, size: Vector3, mat: Material) -> Node3D:
+	var pivot := Node3D.new()
+	pivot.position = pos
+	parent.add_child(pivot)
+	_box(size, Vector3(0, -size.y / 2.0, 0), mat, pivot)
+	return pivot
+
+
+## A person (about 1.8 m): head with hair, torso, two arms and two legs that swing while walking.  Local +x = walking direction.
+func _make_ped(pid: int) -> Node3D:
+	var root := Node3D.new()
+	var shirt_col: Color = SHIRTS[pid % SHIRTS.size()]
+	var shirt := _mat(shirt_col)
+	var trousers := _mat(TROUSERS[(pid * 7) % TROUSERS.size()])
+	var skin := _mat(SKINS[(pid * 5) % SKINS.size()])
+	var hair := _mat(HAIRS[(pid * 3) % HAIRS.size()])
+	root.set_meta("shirt", shirt)
+	root.set_meta("shirt_col", shirt_col)
+	_box(Vector3(0.22, 0.55, 0.4), Vector3(0, 1.2, 0), shirt, root)
+	_cyl(0.05, 0.1, Vector3(0, 1.52, 0), skin, root)                              # neck
+	_sphere(0.12, Vector3(0, 1.68, 0), skin, root)                                # head
+	var cap := _sphere(0.125, Vector3(-0.02, 1.72, 0), hair, root)                # hair
+	cap.scale = Vector3(1.0, 0.75, 1.0)
+	root.set_meta("legL", _limb(root, Vector3(0, 0.93, -0.1), Vector3(0.15, 0.93, 0.15), trousers))
+	root.set_meta("legR", _limb(root, Vector3(0, 0.93, 0.1), Vector3(0.15, 0.93, 0.15), trousers))
+	root.set_meta("armL", _limb(root, Vector3(0, 1.45, -0.26), Vector3(0.1, 0.6, 0.1), shirt))
+	root.set_meta("armR", _limb(root, Vector3(0, 1.45, 0.26), Vector3(0.1, 0.6, 0.1), shirt))
+	add_child(root)
+	return root
 
 
 # ---------------------------------------------------------------------- panel
@@ -590,8 +617,8 @@ func _process(delta: float) -> void:
 		var pid := int(q[4])
 		pseen[pid] = true
 		if not ped_nodes.has(pid):
-			ped_nodes[pid] = _make_ped()
-		var pn: MeshInstance3D = ped_nodes[pid]
+			ped_nodes[pid] = _make_ped(pid)
+		var pn: Node3D = ped_nodes[pid]
 		var cw: String = q[0]
 		var st: String = q[3]
 		var dd := int(q[2])
@@ -599,12 +626,31 @@ func _process(delta: float) -> void:
 		if st == "wait":
 			var axis := Vector3(1, 0, 0) if (cw == "N" or cw == "S") else Vector3(0, 0, 1)
 			pp = _ped_pos(cw, 0.0, dd) - axis * float(dd) * 0.9       # waits at the kerb before the crosswalk
-		pn.position = pp + Vector3(0, 0.85, 0)
-		var pm := pn.material_override as StandardMaterial3D
-		pm.albedo_color = Color(0.8, 0.1, 0.1) if st == "hit" else (Color(0.35, 0.35, 0.6) if st == "wait" else Color(0.1, 0.1, 0.5))
+		# face the walking direction (also while waiting), swing legs and arms by the distance walked
+		var pyaw := 0.0
+		if cw == "N" or cw == "S":
+			pyaw = 0.0 if dd > 0 else PI
+		else:
+			pyaw = -PI / 2.0 if dd > 0 else PI / 2.0
+		var swing := 0.0
+		if st == "cross":
+			swing = sin(float(q[1]) * 2.0 * HALF / 1.3 * PI) * 0.6      # one half step per 1.3 m
+		(pn.get_meta("legL") as Node3D).rotation.z = swing
+		(pn.get_meta("legR") as Node3D).rotation.z = -swing
+		(pn.get_meta("armL") as Node3D).rotation.z = -swing * 0.8
+		(pn.get_meta("armR") as Node3D).rotation.z = swing * 0.8
+		var shirt_m: StandardMaterial3D = pn.get_meta("shirt")
+		if st == "hit":
+			pn.position = pp + Vector3(0, 0.2, 0)
+			pn.rotation = Vector3(0, pyaw, -PI / 2.0)                    # lies on the road
+			shirt_m.albedo_color = Color(0.8, 0.1, 0.1)
+		else:
+			pn.position = pp
+			pn.rotation = Vector3(0, pyaw, 0)
+			shirt_m.albedo_color = pn.get_meta("shirt_col") as Color
 	for pid in ped_nodes.keys():
 		if not pseen.has(pid):
-			(ped_nodes[pid] as MeshInstance3D).queue_free()
+			(ped_nodes[pid] as Node3D).queue_free()
 			ped_nodes.erase(pid)
 
 	crash_ball.visible = bool(msg.get("crash", false))
