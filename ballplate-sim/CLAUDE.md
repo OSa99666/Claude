@@ -66,7 +66,7 @@ inside the PLC (`fbTiltingTable`/`fbTiltingAxis`, point-mass per axis, PLCopen X
 ## Possible next steps
 Project is feature-complete for now.  Decided with the user (latest session) NOT to do:
 - ST controller compile/tuning: the PLC control is external and maintained by the user.
-- Godot "poke the ball": covered by the forced velocity/position setpoints.
+- Godot "poke the ball" as a separate feature: covered by the forced velocity/position setpoints (later also a "Push the ball" trigger on the Faults tab).
 - Live tuning plots: done in CODESYS.
 - OPC UA security: on hold; lab access is via VPN.
 Open ideas only if the user asks: tests/logging for client disconnect/reconnect over the VPN.

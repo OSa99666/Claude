@@ -88,7 +88,7 @@ Or step by step:
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-pytest                                    # 25 tests incl. a real OPC UA round trip
+pytest                                    # 33 tests incl. a real OPC UA round trip
 ```
 
 Without a PLC (a mock client plays the PLC):
