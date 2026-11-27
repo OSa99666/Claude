@@ -86,5 +86,5 @@ DatasourcesTasks cycle (40 ms needs a 10 ms task), otherwise the Data Source Man
 * Verified here: model tests (stopping, queues, yellow decision, crash + latch, runners, pedestrians, faults, repeatability, fixed-time controller
   without crash), OPC UA round trip, headless `run.sh` with the mock PLC.
 * **Not run in Godot** (no Godot in the development container) - the 3D view and panel have to be checked by the user.
-* Assumptions to confirm: the pedestrian light / direction naming (group 1 walks with direction-1 traffic), the detector assignment
+* Assumptions (confirmed by the user): the pedestrian light / direction naming (group 1 walks with direction-1 traffic), the detector assignment
   (`I_XTD11` west arm, `I_XTD12` east, `I_XTD21` north, `I_XTD22` south), `I_XF` = hardware error (broken lamp; detector/button faults do not set it).  Not verified: the real PLC link.

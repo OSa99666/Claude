@@ -14,7 +14,7 @@ Same pattern as `../ballplate-sim`, `../valve-sim`, `../transport-sim` (read the
   `T_LSH10`/`T_LSL10` are true when the level has REACHED the mark (LSL: level <= low mark); `lsl_inverted` flips LSL to "covered" (optional).
 - Mock PLC (`levelsim/mock_plc.py`): `--mode onoff` (valve 60 % / 0 on the switches, limit cycle ~13..87 % with marks 20/80) or `--mode pi`.
 - Godot (`godot/main.gd`): vessel, inlet/outlet pipes + valves, switch lamps, scope (level/valve/setpoint line), scrolling parameter panel,
-  camera block identical to the other sims.  WRITTEN WITHOUT RUNNING GODOT - the user checks it.
+  camera block identical to the other sims.  Written without running Godot; the user has checked the view and confirmed it.
 - Tests: `python -m pytest -q` in `level-sim` (14 pass).  Never put passwords/tokens in the repo.
 - Vessel is OPEN at the top (user request): level > 100 % spills (`spilled`, `q_over`, `overflowing` in `process.py`, state keys `q_over/spilled/overflow`); Godot shows a rim ring, wall stream, puddle, HUD line.  Elbow of the inlet pipe closed with a sphere.  Not run in Godot.
 - `T_LSHH10` (sim->PLC): high-high level switch with its own mark (`h_hh`, config `h_highhigh`, default 95 %, same hysteresis rule, lamp + panel field + scope line in Godot).  It first meant 'overflow'; the user changed it to a level switch (overflow is still shown in HUD/3D and implies LSHH at 100 %).
