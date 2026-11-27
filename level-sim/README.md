@@ -39,7 +39,9 @@ level h (0..100 %, integrator)  : dh/dt = k_acc * (inflow - outflow),   outflow 
 * The level is an **integrator**, so it holds any value when inflow = outflow; the 2nd-order resonance and the dead
   time limit the controller gain.  Defaults (fn 0.15 Hz, zeta 0.3, delay 1.5 s, k_acc 0.1 /s): a P controller starts to
   oscillate around Kp ~ 5 (valve % per level %), a PI controller Kp 2, Ti 100 s settles in about a minute.
-* Level is clamped to 0..100 % (no windup inside the model).  The simulator logs the transfer function and the poles at start.
+* The vessel is **open at the top**: at 100 % (`T_LT10` = 32000, `T_LSH10` true) the surplus spills over the rim.  The level stays at 100 %,
+  the spill flow and the total spilled volume are shown in the HUD (red line) and as water running down the wall plus a growing puddle;
+  *Set level* clears the puddle.  The level cannot go below 0 %.  No windup inside the model.  The simulator logs the transfer function and the poles at start.
 * Test signals (gain in %, 0 = off): *system oscillation* (sinusoid at the input of the 2nd-order block - excites its
   resonance when its frequency equals fn), *random oscillation* (sinusoid with random frequency/amplitude added to the
   inflow), *random consumption* (band-limited random on the outflow), *measurement noise* (only on `T_LT10`).
@@ -62,7 +64,7 @@ level h (0..100 %, integrator)  : dh/dt = k_acc * (inflow - outflow),   outflow 
 ./run.sh --no-mock       # real PLC: PLC connects to opc.tcp://<this-pc>:4843
 ./run.sh --no-godot      # headless
 tools/install_desktop_launcher.sh      # desktop / app-menu icon (extra arguments go to run.sh)
-pytest                                  # 12 tests incl. a real OPC UA round trip
+pytest                                  # 13 tests incl. a real OPC UA round trip
 ```
 
 Camera: mouse drag orbits, middle-drag pans, wheel zooms; keys: arrows pan, Shift+arrows orbit, +/- zoom, Home resets.

@@ -132,3 +132,26 @@ def test_onoff_limit_cycle_between_the_switches():
         if o != prev:
             sw, prev = sw + 1, o
     assert sw >= 8 and 5 < min(hs) < 25 and 75 < max(hs) < 95
+
+
+def test_open_top_overflow():
+    p = LevelProcess(Params(delay=0.0, outlet=10.0), level=95.0, seed=1)
+    p.trim(60.0)
+    seen = False
+    for _ in range(int(20 / 0.01)):
+        p.step(0.01, 60.0)
+        seen = seen or p.overflowing
+    assert seen and p.h == 100.0 and p.lsh
+    assert p.spilled > 20.0
+    assert abs(p.q_over - 50.0) < 1.0                                  # spill flow = inflow - outflow (60 - 10)
+    # volume balance while spilling: 50 %/s * k_acc = 5 level-%/s
+    s0 = p.spilled
+    for _ in range(int(10 / 0.01)):
+        p.step(0.01, 60.0)
+    assert abs((p.spilled - s0) / 10.0 - 5.0) < 0.1
+    p.step(0.01, 0.0)
+    for _ in range(int(30 / 0.01)):
+        p.step(0.01, 0.0)
+    assert not p.overflowing and p.h < 100.0
+    p.set_level(50.0)
+    assert p.spilled == 0.0

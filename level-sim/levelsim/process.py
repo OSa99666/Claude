@@ -6,6 +6,9 @@
                                                                    |
                            outflow = outlet valve (load) + random consumption
 
+The vessel is OPEN at the top: above 100 % the surplus spills over the rim (``spilled``, ``q_over``,
+``overflowing``); the level stays at 100 %.
+
 State order: 2nd-order block (2) + accumulator (1) = 3; the optional actuator lag (``t_act`` > 0) makes it 4.
 Dead time is on top of that.  Linear transfer function (valve command -> level, no saturation, no disturbance):
 
@@ -104,6 +107,10 @@ class LevelProcess:
         self.cons_pulse = 0.0          # extra outflow for pulse tests (%)
         self.cons_pulse_left = 0.0
         self._u_init = 0.0
+        self.spilled = 0.0             # total volume lost over the rim (in level %, 100 = one full vessel)
+        self.q_over = 0.0              # current spill flow (%)
+        self.overflow_hold = 0.0
+        self.overflowing = False
         self._update_switches()
 
     # --- structure information
@@ -132,6 +139,7 @@ class LevelProcess:
     # --- control
     def set_level(self, h: float):
         self.h = min(100.0, max(0.0, h))
+        self.spilled = 0.0
         self._update_switches()
 
     def trim(self, u: float):
@@ -171,7 +179,7 @@ class LevelProcess:
         dx2 = wn * wn * (p.gain * (u_in + dist_in) - x1) - 2 * p.zeta * wn * x2
         q = x1 + q_in_extra
         dh = p.k_acc * (q - q_out)
-        if (h <= 0.0 and dh < 0) or (h >= 100.0 and dh > 0):
+        if h <= 0.0 and dh < 0:                 # empty (the top is open: above 100 % the vessel overflows, see _sub)
             dh = 0.0
         return dx1, dx2, dh
 
@@ -227,7 +235,15 @@ class LevelProcess:
         k4 = self._deriv(s4[0], s4[1], s4[2], u_in, dist_in, q_extra, q_out)
         self.x1, self.x2, self.h = (a + dt / 6.0 * (b + 2 * c + 2 * d + e)
                                     for a, b, c, d, e in zip(s, k1, k2, k3, k4))
+        if self.h > 100.0:                                  # open top: what does not fit spills over the rim
+            self.spilled += self.h - 100.0
+            self.q_over = (self.h - 100.0) / dt / p.k_acc if p.k_acc > 0 else 0.0
+            self.overflow_hold = 0.2
+        else:
+            self.overflow_hold = max(0.0, self.overflow_hold - dt)
+            self.q_over = 0.0
         self.h = min(100.0, max(0.0, self.h))
+        self.overflowing = self.overflow_hold > 0.0
         self.q_in = self.x1 + q_extra
         self.q_out = q_out
 

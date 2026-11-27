@@ -29,6 +29,8 @@ const PIPE_X1 := 3.4
 
 var liquid := MeshInstance3D.new()
 var liquid_mesh := CylinderMesh.new()
+var spill := MeshInstance3D.new()           # overflow over the rim
+var puddle := MeshInstance3D.new()
 var fall := MeshInstance3D.new()            # stream falling from the inlet pipe into the vessel
 var in_disc := Node3D.new()
 var in_lever := Node3D.new()
@@ -215,7 +217,17 @@ func _build_plant() -> void:
 	# vessel
 	_cyl(VESSEL_R + 0.06, 0.1, Vector3(0, VESSEL_Y0 - 0.05, 0), steel)
 	_cyl(VESSEL_R, VESSEL_H, Vector3(0, VESSEL_Y0 + VESSEL_H / 2.0, 0), glass)
-	_cyl(VESSEL_R + 0.03, 0.06, Vector3(0, VESSEL_Y0 + VESSEL_H + 0.03, 0), steel)
+	# open top: only a rim ring (no lid)
+	var rim := MeshInstance3D.new()
+	var rim_mesh := TorusMesh.new()
+	rim_mesh.inner_radius = VESSEL_R - 0.015
+	rim_mesh.outer_radius = VESSEL_R + 0.035
+	rim_mesh.rings = 48
+	rim_mesh.ring_segments = 12
+	rim.mesh = rim_mesh
+	rim.material_override = steel
+	rim.position = Vector3(0, VESSEL_Y0 + VESSEL_H, 0)
+	add_child(rim)
 	liquid_mesh.top_radius = VESSEL_R - 0.04
 	liquid_mesh.bottom_radius = VESSEL_R - 0.04
 	liquid_mesh.height = 1.0
@@ -232,6 +244,14 @@ func _build_plant() -> void:
 	var in_len := IN_END_X - PIPE_X0
 	_cyl(0.12, in_len, Vector3(PIPE_X0 + in_len / 2.0, IN_Y, 0), steel, Vector3(0, 0, 90))
 	_cyl(0.12, 0.3, Vector3(IN_END_X, IN_Y - 0.15, 0), steel)
+	var elbow := MeshInstance3D.new()                  # closes the bend between the horizontal and the vertical pipe
+	var em := SphereMesh.new()
+	em.radius = 0.12
+	em.height = 0.24
+	elbow.mesh = em
+	elbow.material_override = steel
+	elbow.position = Vector3(IN_END_X, IN_Y, 0)
+	add_child(elbow)
 	# outlet pipe (bottom right)
 	var out_len := PIPE_X1 - VESSEL_R
 	_cyl(0.12, out_len, Vector3(VESSEL_R + out_len / 2.0, OUT_Y, 0), steel, Vector3(0, 0, 90))
@@ -248,6 +268,23 @@ func _build_plant() -> void:
 	fall.mesh = fm
 	fall.material_override = _mat(PARTICLE)
 	add_child(fall)
+	# overflow: water running down the outside of the wall + a puddle on the floor
+	var sm2 := BoxMesh.new()
+	sm2.size = Vector3(0.3, 1.0, 0.02)
+	spill.mesh = sm2
+	spill.material_override = _mat(WATER, 0.85)
+	spill.visible = false
+	add_child(spill)
+	var pm := CylinderMesh.new()
+	pm.top_radius = 1.0
+	pm.bottom_radius = 1.0
+	pm.height = 0.01
+	pm.radial_segments = 48
+	puddle.mesh = pm
+	puddle.material_override = _mat(WATER, 0.7)
+	puddle.position = Vector3(0, 0.006, 0)
+	puddle.visible = false
+	add_child(puddle)
 	# particle streams in both pipes
 	_make_stream(IN_Y, PIPE_X0, IN_END_X, 60)
 	_make_stream(OUT_Y, VESSEL_R, PIPE_X1, 60)
@@ -557,6 +594,19 @@ func _process(delta: float) -> void:
 	fall.scale = Vector3(clampf(sqrt(q_in / 100.0), 0.05, 1.0) * 1.2, fall_len, clampf(sqrt(q_in / 100.0), 0.05, 1.0) * 1.2)
 	fall.position = Vector3(IN_END_X, surface + fall_len / 2.0, 0)
 
+	# overflow over the open top: strip down the front wall, puddle grows with the spilled volume
+	var q_over := float(msg.get("q_over", 0.0))
+	var spilled := float(msg.get("spilled", 0.0))
+	var over := bool(msg.get("overflow", false))
+	spill.visible = over
+	if over:
+		var wd := clampf(sqrt(q_over / 100.0), 0.1, 1.0)
+		spill.scale = Vector3(wd, VESSEL_H + 0.05, 1.0)
+		spill.position = Vector3(-0.15, VESSEL_Y0 + VESSEL_H / 2.0, sqrt(VESSEL_R * VESSEL_R - 0.15 * 0.15) + 0.03)
+	puddle.visible = spilled > 0.05
+	var pr := VESSEL_R + 0.12 + 1.3 * sqrt(clampf(spilled / 300.0, 0.0, 1.0))
+	puddle.scale = Vector3(pr, 1.0, pr)
+
 	# level switch lamps follow the configured marks
 	var yh := VESSEL_Y0 + VESSEL_H * float(p.get("h_high", 80.0)) / 100.0
 	var yl := VESSEL_Y0 + VESSEL_H * float(p.get("h_low", 20.0)) / 100.0
@@ -569,9 +619,10 @@ func _process(delta: float) -> void:
 	_led(lamp_l, bool(msg["lsl"]), LED_LOW)
 
 	var src := "manual override" if bool(msg.get("manual", false)) else ("PLC" if bool(msg.get("plc", false)) else "no PLC - valve closed")
-	hud.text = "level %5.1f %%   (T_LT10 = %d,  true %.1f %%)\nvalve %5.1f %%   (T_FCV10 = %d)  [%s]\ninflow %5.1f %%   outflow %5.1f %%\nT_LSH10 %s   T_LSL10 %s      OPC UA clients: %d\n\nprocess order %d + dead time %.1f s\npoles: %s" % [
+	hud.text = "level %5.1f %%   (T_LT10 = %d,  true %.1f %%)\nvalve %5.1f %%   (T_FCV10 = %d)  [%s]\ninflow %5.1f %%   outflow %5.1f %%\nT_LSH10 %s   T_LSL10 %s      OPC UA clients: %d\n%s\nprocess order %d + dead time %.1f s\npoles: %s" % [
 		float(msg["y"]), int(msg["lt_raw"]), h, u, int(msg["fcv_raw"]), src, q_in, q_out,
 		_lamp(bool(msg["lsh"])), _lamp(bool(msg["lsl"])), int(msg.get("clients", 0)),
+		("\nOVERFLOW  %.1f %%/s over the rim   spilled %.0f %%  (Set level resets)" % [q_over, spilled]) if (over or spilled > 0.05) else "\n",
 		int(msg["order"]), float(p.get("delay", 0.0)), ", ".join(PackedStringArray(msg["poles"]))]
 
 

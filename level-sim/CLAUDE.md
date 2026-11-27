@@ -15,4 +15,5 @@ Same pattern as `../ballplate-sim`, `../valve-sim`, `../transport-sim` (read the
 - Mock PLC (`levelsim/mock_plc.py`): `--mode onoff` (valve 60 % / 0 on the switches, limit cycle ~13..87 % with marks 20/80) or `--mode pi`.
 - Godot (`godot/main.gd`): vessel, inlet/outlet pipes + valves, switch lamps, scope (level/valve/setpoint line), scrolling parameter panel,
   camera block identical to the other sims.  WRITTEN WITHOUT RUNNING GODOT - the user checks it.
-- Tests: `python -m pytest -q` in `level-sim` (12 pass).  Never put passwords/tokens in the repo.
+- Tests: `python -m pytest -q` in `level-sim` (13 pass).  Never put passwords/tokens in the repo.
+- Vessel is OPEN at the top (user request): level > 100 % spills (`spilled`, `q_over`, `overflowing` in `process.py`, state keys `q_over/spilled/overflow`); Godot shows a rim ring, wall stream, puddle, HUD line.  Elbow of the inlet pipe closed with a sphere.  Not run in Godot.

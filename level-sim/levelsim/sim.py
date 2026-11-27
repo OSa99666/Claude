@@ -99,7 +99,8 @@ class Simulator:
         params = {k: getattr(p, k) for k in list(FLOAT_KEYS) + ["lsl_inverted"]}
         params.update(manual_on=self.manual_on, manual_u=self.manual_u)
         msg = {"t": round(self.t, 3), "h": pr.h, "y": pr.measured, "u": pr.u, "u_delayed": pr.u_delayed,
-               "q_in": pr.q_in, "q_out": pr.q_out, "lsh": pr.lsh, "lsl": pr.lsl,
+               "q_in": pr.q_in, "q_out": pr.q_out, "q_over": pr.q_over, "spilled": pr.spilled,
+               "overflow": pr.overflowing, "lsh": pr.lsh, "lsl": pr.lsl,
                "fcv_raw": self.fcv_raw, "lt_raw": self.lt_raw,
                "plc": self.clients > 0, "clients": self.clients, "manual": self.manual_on,
                "order": pr.order(), "tf": pr.transfer_function(),
