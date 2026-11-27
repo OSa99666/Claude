@@ -1,0 +1,39 @@
+# Level process simulator (vessel with inlet valve, dead time, 2nd-order block and accumulator; SISO, order >= 3)
+#
+# The simulator is the OPC UA *server*; the PLC connects as a client (CODESYS Data Source Manager).
+# Only four IOs are exposed; all process parameters and test signals are set in the Godot UI.
+
+[opcua]
+endpoint      = "opc.tcp://0.0.0.0:4843"
+namespace_uri = "urn:levelsim:simulation"
+publishing_interval_cap_ms = 20      # serves slow PLC clients faster; 0 = off (see ballplate-sim README)
+# username = "plc"
+# password = "change-me"
+
+[sim]
+cycle_ms = 10
+seed = 0                             # random test signals: 0 = different every start, else repeatable
+
+[scaling]
+raw_full = 32000                     # T_FCV10 / T_LT10 raw value for 100 %
+
+# Defaults for values that can be changed live in the Godot UI
+[process]
+start_level   = 40.0   # %
+delay_s       = 1.5    # dead time valve -> flow
+actuator_lag_s = 0.0   # 0 = off (order 3); > 0 adds a first-order valve actuator (order 4)
+fn_hz         = 0.15   # 2nd-order block natural frequency
+zeta          = 0.3    # damping
+gain          = 1.0    # static gain of the 2nd-order block
+k_acc         = 0.1    # accumulator reinforcement [1/s]: dh/dt = k_acc * (inflow - outflow)
+outlet_pct    = 30.0   # outlet valve (load) opening
+h_high        = 80.0   # T_LSH10 reached above this level
+h_low         = 20.0   # T_LSL10 reached below this level
+hysteresis    = 2.0
+lsl_inverted  = false  # true: T_LSL10 is true while the level is ABOVE the low mark
+
+[visual]
+host         = "127.0.0.1"   # where Godot listens for state (UDP)
+port         = 9876
+command_port = 9877          # where the simulator listens for Godot's UI commands
+enabled      = true
