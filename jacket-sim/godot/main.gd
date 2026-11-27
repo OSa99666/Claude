@@ -67,6 +67,7 @@ var last_t := -1.0
 var last_push := -1.0
 
 const METAL := Color(0.6, 0.63, 0.68)
+const WATER := Color8(0x00, 0x00, 0x65)         # dark blue water upstream of a valve disc
 const WATER_COLD := Color(0.05, 0.12, 0.45)
 const WATER_HOT := Color(0.65, 0.12, 0.05)
 const JACKET_COLD := Color(0.55, 0.65, 0.8)
@@ -226,6 +227,16 @@ func _valve(x: float, y: float, disc: Node3D, lever: Node3D, steel: Material) ->
 		_cyl(0.17, 0.05, Vector3(x + float(fx), y, 0), steel, Vector3(0, 0, 90))    # flanges
 
 
+## Dark blue water fills the window upstream of the disc (x < xv); the flow particles show through the window.
+func _pipe_with_window(x0: float, x1: float, xv: float, y: float, steel: Material, glass: Material) -> MeshInstance3D:
+	var wa := xv - 0.28
+	var wb := xv + 0.28
+	_cyl(0.12, wa - x0, Vector3((x0 + wa) / 2.0, y, 0), steel, Vector3(0, 0, 90))
+	_cyl(0.12, x1 - wb, Vector3((wb + x1) / 2.0, y, 0), steel, Vector3(0, 0, 90))
+	_cyl(0.12, wb - wa, Vector3(xv, y, 0), glass, Vector3(0, 0, 90))
+	return _cyl(0.1, xv - 0.02 - wa, Vector3((wa + xv - 0.02) / 2.0, y, 0), _mat(WATER), Vector3(0, 0, 90))
+
+
 func _torus(inner: float, outer: float, pos: Vector3, mat: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var m := TorusMesh.new()
@@ -276,11 +287,18 @@ func _build_plant() -> void:
 		_cyl(0.012, 0.16, Vector3(scale_x, y, 0), steel, Vector3(0, 0, 90))
 		_label3d("%.1f m" % float(lv), Vector3(scale_x + 0.6, y, 0.0), 26)
 	# inlet pipe (top left) with a drop pipe over the tank, outlet pipe (bottom right)
-	var in_len := IN_END_X - PIPE_X0
-	_cyl(0.12, in_len, Vector3(PIPE_X0 + in_len / 2.0, IN_Y, 0), steel, Vector3(0, 0, 90))
+	var pipe_glass := _mat(Color(0.75, 0.85, 0.95), 0.25)
+	_pipe_with_window(PIPE_X0, IN_END_X, -2.2, IN_Y, steel, pipe_glass)          # transparent window around each valve
 	_cyl(0.12, 0.45, Vector3(IN_END_X, IN_Y - 0.225, 0), steel)
-	var out_len := PIPE_X1 - TANK_R
-	_cyl(0.12, out_len, Vector3(TANK_R + out_len / 2.0, OUT_Y, 0), steel, Vector3(0, 0, 90))
+	var elbow := MeshInstance3D.new()                                             # rounds the bend
+	var em := SphereMesh.new()
+	em.radius = 0.12
+	em.height = 0.24
+	elbow.mesh = em
+	elbow.material_override = steel
+	elbow.position = Vector3(IN_END_X, IN_Y, 0)
+	add_child(elbow)
+	_pipe_with_window(TANK_R, PIPE_X1, 2.4, OUT_Y, steel, pipe_glass)
 	_valve(-2.2, IN_Y, in_disc, in_lever, steel)
 	_valve(2.4, OUT_Y, out_disc, out_lever, steel)
 	_label3d("M_YR02  inflow", Vector3(-2.2, IN_Y + 1.1, 0.0))
