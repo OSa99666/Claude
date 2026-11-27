@@ -510,7 +510,7 @@ func _build_mechanism(L: float) -> void:
 	rod_x = MeshInstance3D.new()
 	rod_y = MeshInstance3D.new()
 	lbl_x = _servo_label(Vector3(0.35 * L - 0.125 * L, -0.275 * L + 0.22, 0.2))
-	lbl_y = _servo_label(Vector3(0.2, -0.275 * L + 0.22, 0.35 * L - 0.125 * L))
+	lbl_y = _servo_label(Vector3(0.2, -0.275 * L + 0.22 + 0.07, 0.35 * L - 0.125 * L))      # one font height higher than the X label
 	var d := 0.35 * L                      # distance of the rod attachments from the plate centre
 	var a := 0.125 * L                     # horn length
 	var base_top := -0.45 * L              # top of the base plate below the plate
