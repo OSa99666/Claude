@@ -1,17 +1,15 @@
-extends Node2D
-## Intersection simulation: 2D top view + user interface.
+extends Node3D
+## Intersection simulation: 3D view + user interface.
 ##
 ## All logic runs in the Python simulator (intersectionsim).  This program
 ##  * receives the state as JSON over UDP (default port 9878) and draws it,
 ##  * sends the parameter/command values from the panel back to the simulator
 ##    (UDP, port 9879, to the address the state packets come from).
 ##
-## I_XF (hardware fault of the traffic light system, e.g. a broken lamp) is shown as the 'Intersection fault' box top right; a collision shows the
-## crash smiley.
-##
-## Direction 1 = west-east road, direction 2 = north-south road.  Traffic lights show what is really lit
-## (command and lamp not broken); a broken lamp gets an orange cross.  Yellow disc at a pedestrian light =
-## request acknowledged by the PLC (I_YPDnA), orange square = push button pressed, orange loops = vehicle detectors.
+## Direction 1 = west-east road, direction 2 = north-south road (model x = east, model y = south = Godot z).
+## Traffic lights show what is really lit (command and lamp not broken); a broken lamp gets an orange diamond.
+## Yellow lamp at a pedestrian light post = request acknowledged by the PLC (I_YPDnA), orange box = push button pressed,
+## orange loops on the road = vehicle detectors.  I_XF (hardware fault) = box at the top, a collision = crash ball in the middle.
 ##
 ## Run:  godot --path godot -- [--port 9878] [--cmd-port 9879]
 
@@ -21,7 +19,6 @@ var udp := PacketPeerUDP.new()
 var cmd := PacketPeerUDP.new()
 var sim_host := ""
 
-const VIEW_HALF := 42.0          # visible half width in metres
 const HALF := 4.0
 const LANE := 2.0
 const CW0 := 4.4
@@ -31,21 +28,23 @@ const DET0 := -11.0
 const DET1 := -8.0
 const CAR_LEN := 4.5
 const CAR_W := 1.9
-const PANEL_W := 410.0
+const ROAD_HALF := 62.0
 
-const GRASS := Color(0.54, 0.64, 0.5)
-const ROAD := Color(0.76, 0.76, 0.76)
-const ZEBRA := Color(0.9, 0.9, 0.9)
-const CAR_COL := Color(0.55, 0.65, 0.9)
-const CRASH_COL := Color(0.75, 0.2, 0.2)
+const GRASS := Color(0.42, 0.55, 0.38)
+const ROAD := Color(0.30, 0.30, 0.32)
+const ZEBRA := Color(0.85, 0.85, 0.85)
+const LINE := Color(0.85, 0.5, 0.1)
+const CAR_COLS := [Color(0.35, 0.45, 0.8), Color(0.75, 0.75, 0.78), Color(0.3, 0.55, 0.35), Color(0.7, 0.55, 0.2), Color(0.45, 0.3, 0.55), Color(0.2, 0.25, 0.3)]
+const CRASH_COL := Color(0.75, 0.15, 0.15)
 const SIG_R := Color(0.9, 0.1, 0.1)
 const SIG_Y := Color(1.0, 0.65, 0.0)
 const SIG_G := Color(0.1, 0.85, 0.2)
-const HOUSING := Color(0.62, 0.62, 0.62)
+const METAL := Color(0.6, 0.63, 0.68)
 
 var hud := Label.new()
 var fault_box := Label.new()
 var panel := PanelContainer.new()
+var cam := Camera3D.new()
 var controls := {}
 var clear_fault_seq := 0
 var reset_stats_seq := 0
@@ -54,11 +53,22 @@ var ui_ready := false
 var send_timer := 0.0
 var msg := {}
 var last_rx_ms := -100000
-var scale_px := 8.0
-var origin := Vector2.ZERO
 
 const LAMP_NAMES := ["TL1R", "TL1Y", "TL1G", "TL2R", "TL2Y", "TL2G", "PL1R", "PL1G", "PL2R", "PL2G"]
 const DET_NAMES := ["XTD11", "XTD12", "XTD21", "XTD22"]
+var lamp_mats := {}                 # lamp name -> shared material (all heads of that lamp)
+var bk_marks := {}                  # lamp name -> Array of orange diamonds
+var det_nodes := {}                 # detector name -> MeshInstance3D
+var req_lamps := {}                 # group -> Array of yellow request lamps
+var btn_nodes := {}                 # group -> Array of push button boxes
+var car_nodes := {}                 # id -> Node3D
+var ped_nodes := {}                 # id -> MeshInstance3D
+var crash_ball := Node3D.new()
+
+var yaw := 0.6
+var pitch := 0.75
+var dist := 48.0
+var target := Vector3(0, 0, 0)
 
 
 func _ready() -> void:
@@ -71,210 +81,302 @@ func _ready() -> void:
 	var err := udp.bind(port)
 	if err != OK:
 		push_error("cannot bind UDP port %d (error %d)" % [port, err])
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.62, 0.75, 0.88)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.65, 0.67, 0.72)
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-55, 35, 0)
+	add_child(sun)
+
+	_build_scene()
+	add_child(cam)
+	cam.current = true
+	cam.far = 600.0
+	_update_camera()
+	_save_home()
+
 	var layer := CanvasLayer.new()
 	hud.position = Vector2(12, 8)
 	hud.add_theme_font_size_override("font_size", 15)
 	hud.add_theme_color_override("font_color", Color(0.05, 0.07, 0.1))
 	layer.add_child(hud)
 	fault_box.text = "Intersection fault (I_XF)"
-	fault_box.add_theme_font_size_override("font_size", 16)
-	fault_box.add_theme_color_override("font_color", Color(0.8, 0.0, 0.0))
+	fault_box.add_theme_font_size_override("font_size", 18)
+	fault_box.add_theme_color_override("font_color", Color(0.85, 0.0, 0.0))
 	fault_box.visible = false
+	fault_box.position = Vector2(12, 90)
 	layer.add_child(fault_box)
 	_add_help(layer)
 	_build_panel(layer)
 	add_child(layer)
 
 
-# ------------------------------------------------------------------ helpers
-func _w(x: float, y: float) -> Vector2:
-	return origin + Vector2(x, y) * scale_px
+# ------------------------------------------------------------------ 3D scene
+func _mat(c: Color, alpha := 1.0, metal := 0.0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(c.r, c.g, c.b, alpha)
+	m.metallic = metal
+	m.roughness = 0.6
+	if alpha < 1.0:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	return m
 
 
-func _rect_w(x0: float, y0: float, x1: float, y1: float, col: Color) -> void:
-	draw_rect(Rect2(_w(x0, y0), Vector2(x1 - x0, y1 - y0) * scale_px), col)
+func _box(size: Vector3, pos: Vector3, mat: Material, parent: Node = null) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var m := BoxMesh.new()
+	m.size = size
+	mi.mesh = m
+	mi.material_override = mat
+	mi.position = pos
+	(parent if parent != null else self).add_child(mi)
+	return mi
 
 
-func _car_center(arm: String, s: float) -> Vector2:
+func _cyl(r: float, h: float, pos: Vector3, mat: Material, parent: Node = null) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var m := CylinderMesh.new()
+	m.top_radius = r
+	m.bottom_radius = r
+	m.height = h
+	m.radial_segments = 16
+	mi.mesh = m
+	mi.material_override = mat
+	mi.position = pos
+	(parent if parent != null else self).add_child(mi)
+	return mi
+
+
+func _sphere(r: float, pos: Vector3, mat: Material, parent: Node) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var m := SphereMesh.new()
+	m.radius = r
+	m.height = 2.0 * r
+	m.radial_segments = 16
+	m.rings = 8
+	mi.mesh = m
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+	return mi
+
+
+func _label3d(text: String, pos: Vector3, size := 48) -> Label3D:
+	var lab := Label3D.new()
+	lab.text = text
+	lab.font_size = size
+	lab.pixel_size = 0.012
+	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lab.modulate = Color(0.1, 0.1, 0.15)
+	lab.position = pos
+	add_child(lab)
+	return lab
+
+
+## lamp material shared by every head showing this lamp: coloured and glowing when lit, dark otherwise
+func _lamp_mat(lname: String, col: Color) -> StandardMaterial3D:
+	if not lamp_mats.has(lname):
+		var m := _mat(col.darkened(0.75))
+		lamp_mats[lname] = m
+		m.set_meta("col", col)
+	return lamp_mats[lname]
+
+
+func _set_lamp(lname: String, on: bool) -> void:
+	var m: StandardMaterial3D = lamp_mats[lname]
+	var col: Color = m.get_meta("col")
+	m.albedo_color = col if on else col.darkened(0.75)
+	m.emission_enabled = on
+	m.emission = col
+	m.emission_energy_multiplier = 1.6
+
+
+func _add_broken_mark(lname: String, parent: Node, pos: Vector3) -> void:
+	var d := _box(Vector3(0.34, 0.34, 0.06), pos, _mat(Color(0.95, 0.5, 0.1)), parent)
+	d.rotation_degrees = Vector3(0, 0, 45)
+	d.visible = false
+	if not bk_marks.has(lname):
+		bk_marks[lname] = []
+	bk_marks[lname].append(d)
+
+
+## Traffic light head on a pole at (x, z); `face` is the direction the lamps look (towards the approaching traffic)
+func _traffic_head(x: float, z: float, face: Vector3, group: int) -> void:
+	var steel := _mat(METAL, 1.0, 0.5)
+	var root := Node3D.new()
+	root.position = Vector3(x, 0, z)
+	root.rotation.y = atan2(face.x, face.z)
+	add_child(root)
+	_cyl(0.09, 4.6, Vector3(0, 2.3, 0), steel, root)
+	_box(Vector3(0.6, 1.9, 0.4), Vector3(0, 4.3, 0), _mat(Color(0.12, 0.12, 0.14)), root)
+	var letters := ["R", "Y", "G"]
+	var cols := [SIG_R, SIG_Y, SIG_G]
+	for i in 3:
+		var nm := "TL%d%s" % [group, letters[i]]
+		var p := Vector3(0, 4.85 - 0.62 * float(i), 0.22)
+		_sphere(0.25, p, _lamp_mat(nm, cols[i]), root)
+		_add_broken_mark(nm, root, p + Vector3(0, 0, 0.12))
+
+
+func _ped_head(x: float, z: float, face: Vector3, group: int, first: bool) -> void:
+	var steel := _mat(METAL, 1.0, 0.5)
+	var root := Node3D.new()
+	root.position = Vector3(x, 0, z)
+	root.rotation.y = atan2(face.x, face.z)
+	add_child(root)
+	_cyl(0.07, 3.0, Vector3(0, 1.5, 0), steel, root)
+	_box(Vector3(0.5, 1.2, 0.3), Vector3(0, 2.7, 0), _mat(Color(0.12, 0.12, 0.14)), root)
+	var rn := "PL%dR" % group
+	var gn := "PL%dG" % group
+	_sphere(0.19, Vector3(0, 3.0, 0.16), _lamp_mat(rn, SIG_R), root)
+	_sphere(0.19, Vector3(0, 2.4, 0.16), _lamp_mat(gn, SIG_G), root)
+	_add_broken_mark(rn, root, Vector3(0, 3.0, 0.27))
+	_add_broken_mark(gn, root, Vector3(0, 2.4, 0.27))
+	if first:
+		# request acknowledged (yellow lamp on top) and push button (box on the pole)
+		var rl := _sphere(0.17, Vector3(0, 3.5, 0), _mat(Color(1.0, 0.85, 0.1).darkened(0.7)), root)
+		if not req_lamps.has(group):
+			req_lamps[group] = []
+		req_lamps[group].append(rl)
+		var bb := _box(Vector3(0.18, 0.18, 0.1), Vector3(0, 1.3, 0.1), _mat(Color(0.45, 0.45, 0.45)), root)
+		if not btn_nodes.has(group):
+			btn_nodes[group] = []
+		btn_nodes[group].append(bb)
+
+
+func _build_scene() -> void:
+	_box(Vector3(400, 0.2, 400), Vector3(0, -0.12, 0), _mat(GRASS), null)
+	var road := _mat(ROAD)
+	_box(Vector3(2 * ROAD_HALF, 0.06, 2 * HALF), Vector3(0, 0.0, 0), road, null)
+	_box(Vector3(2 * HALF, 0.06, 2 * ROAD_HALF), Vector3(0, 0.0, 0), road, null)
+	var line := _mat(LINE)
+	var x := CW1 + 1.5
+	while x < ROAD_HALF - 2.0:
+		for sgn in [-1.0, 1.0]:
+			_box(Vector3(2.0, 0.02, 0.16), Vector3(float(sgn) * (x + 1.0), 0.05, 0), line, null)
+			_box(Vector3(0.16, 0.02, 2.0), Vector3(0, 0.05, float(sgn) * (x + 1.0)), line, null)
+		x += 4.0
+	var zebra := _mat(ZEBRA)
+	for i in 7:
+		var a := -HALF + 0.6 + float(i) * 1.15
+		_box(Vector3(0.6, 0.02, CW1 - CW0), Vector3(a, 0.05, -(CW0 + CW1) / 2.0), zebra, null)
+		_box(Vector3(0.6, 0.02, CW1 - CW0), Vector3(a, 0.05, (CW0 + CW1) / 2.0), zebra, null)
+		_box(Vector3(CW1 - CW0, 0.02, 0.6), Vector3(-(CW0 + CW1) / 2.0, 0.05, a), zebra, null)
+		_box(Vector3(CW1 - CW0, 0.02, 0.6), Vector3((CW0 + CW1) / 2.0, 0.05, a), zebra, null)
+	# stop lines
+	_box(Vector3(0.3, 0.02, HALF), Vector3(STOP + 0.15, 0.05, HALF / 2.0), zebra, null)
+	_box(Vector3(0.3, 0.02, HALF), Vector3(-STOP - 0.15, 0.05, -HALF / 2.0), zebra, null)
+	_box(Vector3(HALF, 0.02, 0.3), Vector3(-HALF / 2.0, 0.05, STOP + 0.15), zebra, null)
+	_box(Vector3(HALF, 0.02, 0.3), Vector3(HALF / 2.0, 0.05, -STOP - 0.15), zebra, null)
+	# vehicle detector loops (stop-line side of each arm)
+	var loops := {"XTD11": Vector3(-9.5, 0.06, 2.0), "XTD12": Vector3(9.5, 0.06, -2.0),
+		"XTD21": Vector3(-2.0, 0.06, -9.5), "XTD22": Vector3(2.0, 0.06, 9.5)}
+	for k in loops:
+		var d := _box(Vector3(3.0, 0.02, 3.0), loops[k], _mat(Color(0.85, 0.5, 0.2).darkened(0.3)), null)
+		det_nodes[k] = d
+	# signal heads: direction 1 (west / east arm) and direction 2 (north / south arm)
+	_traffic_head(-10.5, 5.8, Vector3(-1, 0, 0), 1)
+	_traffic_head(10.5, -5.8, Vector3(1, 0, 0), 1)
+	_traffic_head(-5.8, -10.5, Vector3(0, 0, -1), 2)
+	_traffic_head(5.8, 10.5, Vector3(0, 0, 1), 2)
+	# pedestrian lights at the ends of every crosswalk (facing the crosswalk)
+	_ped_head(-5.6, -5.9, Vector3(1, 0, 0), 1, true)
+	_ped_head(5.6, -5.9, Vector3(-1, 0, 0), 1, false)
+	_ped_head(-5.6, 5.9, Vector3(1, 0, 0), 1, false)
+	_ped_head(5.6, 5.9, Vector3(-1, 0, 0), 1, false)
+	_ped_head(-5.9, -5.6, Vector3(0, 0, 1), 2, true)
+	_ped_head(-5.9, 5.6, Vector3(0, 0, -1), 2, false)
+	_ped_head(5.9, -5.6, Vector3(0, 0, 1), 2, false)
+	_ped_head(5.9, 5.6, Vector3(0, 0, -1), 2, false)
+	_label3d("Direction 1", Vector3(-ROAD_HALF * 0.55, 1.2, -1.5))
+	_label3d("Direction 2", Vector3(2.5, 1.2, ROAD_HALF * 0.55))
+	# crash ball (yellow, with a face) above the crossing
+	var yb := _sphere(1.6, Vector3(0, 3.2, 0), _mat(Color(1.0, 0.8, 0.1)), crash_ball)
+	var face := Label3D.new()
+	face.text = "x  x\n  _"
+	face.font_size = 64
+	face.pixel_size = 0.02
+	face.modulate = Color(0.2, 0.2, 0.1)
+	face.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	face.position = Vector3(0, 3.2, 1.7)
+	crash_ball.add_child(face)
+	crash_ball.visible = false
+	add_child(crash_ball)
+	for n in LAMP_NAMES:
+		_set_lamp(n, false)
+
+
+func _car_center(arm: String, s: float) -> Vector3:
 	var m := s - CAR_LEN / 2.0
 	match arm:
 		"W":
-			return Vector2(m, LANE)
+			return Vector3(m, 0, LANE)
 		"E":
-			return Vector2(-m, -LANE)
+			return Vector3(-m, 0, -LANE)
 		"N":
-			return Vector2(-LANE, m)
-	return Vector2(LANE, -m)
+			return Vector3(-LANE, 0, m)
+	return Vector3(LANE, 0, -m)
 
 
-func _car_angle(arm: String) -> float:
+func _car_yaw(arm: String) -> float:
 	match arm:
 		"W":
 			return 0.0
 		"E":
 			return PI
 		"N":
-			return PI / 2.0
-	return -PI / 2.0
+			return -PI / 2.0
+	return PI / 2.0
 
 
-func _ped_pos(cw: String, u: float, d: int) -> Vector2:
+func _ped_pos(cw: String, u: float, d: int) -> Vector3:
 	var f := u if d > 0 else 1.0 - u
 	var a := -HALF + 2.0 * HALF * f
 	var mid := (CW0 + CW1) / 2.0
 	match cw:
 		"N":
-			return Vector2(a, -mid)
+			return Vector3(a, 0, -mid)
 		"S":
-			return Vector2(a, mid)
+			return Vector3(a, 0, mid)
 		"W":
-			return Vector2(-mid, a)
-	return Vector2(mid, a)
+			return Vector3(-mid, 0, a)
+	return Vector3(mid, 0, a)
 
 
-# --------------------------------------------------------------------- draw
-func _draw() -> void:
-	var vs := get_viewport_rect().size
-	draw_rect(Rect2(Vector2.ZERO, vs), GRASS)
-	var aw := vs.x - PANEL_W
-	var ah := vs.y - 28.0
-	scale_px = minf(aw, ah) / (2.0 * VIEW_HALF)
-	origin = Vector2(aw / 2.0, ah / 2.0)
-	var v := VIEW_HALF + 10.0
-	_rect_w(-v, -HALF, v, HALF, ROAD)
-	_rect_w(-HALF, -v, HALF, v, ROAD)
-	# centre lines (dashed orange) outside the crossing
-	var x := CW1 + 1.5
-	while x < v:
-		_rect_w(x, -0.08, x + 2.0, 0.08, Color(0.95, 0.55, 0.1))
-		_rect_w(-x - 2.0, -0.08, -x, 0.08, Color(0.95, 0.55, 0.1))
-		_rect_w(-0.08, x, 0.08, x + 2.0, Color(0.95, 0.55, 0.1))
-		_rect_w(-0.08, -x - 2.0, 0.08, -x, Color(0.95, 0.55, 0.1))
-		x += 4.0
-	# crosswalks (zebra stripes along the travel direction) and stop lines
-	var i := 0
-	while i < 7:
-		var a := -HALF + 0.3 + float(i) * 1.15
-		_rect_w(a, -CW1, a + 0.6, -CW0, ZEBRA)
-		_rect_w(a, CW0, a + 0.6, CW1, ZEBRA)
-		_rect_w(-CW1, a, -CW0, a + 0.6, ZEBRA)
-		_rect_w(CW0, a, CW1, a + 0.6, ZEBRA)
-		i += 1
-	_rect_w(STOP, 0.0, STOP + 0.3, HALF, ZEBRA)
-	_rect_w(-STOP - 0.3, -HALF, -STOP, 0.0, ZEBRA)
-	_rect_w(-HALF, STOP, 0.0, STOP + 0.3, ZEBRA)
-	_rect_w(0.0, -STOP - 0.3, HALF, -STOP, ZEBRA)
-	var font := ThemeDB.fallback_font
-	draw_string(font, _w(-VIEW_HALF + 1.0, -1.0), "Direction 1", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.1, 0.1, 0.1))
-	draw_string(font, _w(1.0, VIEW_HALF - 1.0), "Direction 2", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.1, 0.1, 0.1))
-	if msg.is_empty():
-		return
-
-	var det: Dictionary = msg.get("det", {})
-	# vehicle detector loops (stop-line side of each arm)
-	var loops := {"XTD11": Rect2(DET0, 0.5, 3.0, 3.0), "XTD12": Rect2(-DET1, -3.5, 3.0, 3.0),
-		"XTD21": Rect2(-3.5, DET0, 3.0, 3.0), "XTD22": Rect2(0.5, -DET1, 3.0, 3.0)}
-	for k in loops:
-		var r: Rect2 = loops[k]
-		var on := bool(det.get(k, false))
-		var col := Color(1.0, 0.55, 0.1) if on else Color(0.85, 0.5, 0.2, 0.5)
-		draw_rect(Rect2(_w(r.position.x, r.position.y), r.size * scale_px), col, on, 2.0)
-
-	# signal heads (direction 1 horizontal, direction 2 vertical) and pedestrian lights
-	_head(-10.5, 5.8, true, 1)
-	_head(10.5, -5.8, true, 1)
-	_head(-5.8, -10.5, false, 2)
-	_head(5.8, 10.5, false, 2)
-	_ped_head(-5.6, -5.9, 1, 0)
-	_ped_head(5.6, -5.9, 1, 1)
-	_ped_head(-5.6, 5.9, 1, 0)
-	_ped_head(5.6, 5.9, 1, 1)
-	_ped_head(-5.9, -5.6, 2, 0)
-	_ped_head(-5.9, 5.6, 2, 1)
-	_ped_head(5.9, -5.6, 2, 0)
-	_ped_head(5.9, 5.6, 2, 1)
-
-	# pedestrians
-	var peds: Array = msg.get("peds", [])
-	for q in peds:
-		var cw: String = q[0]
-		var st: String = q[3]
-		var dd := int(q[2])
-		var p := _ped_pos(cw, float(q[1]), dd)
-		if st == "wait":
-			var axis := Vector2(1, 0) if (cw == "N" or cw == "S") else Vector2(0, 1)
-			p = _ped_pos(cw, 0.0, dd) - axis * float(dd) * 0.9       # waits at the kerb before the crosswalk
-		var col := Color(0.1, 0.1, 0.5)
-		if st == "wait":
-			col = Color(0.35, 0.35, 0.6)
-		elif st == "hit":
-			col = Color(0.8, 0.1, 0.1)
-		draw_circle(_w(p.x, p.y), 0.45 * scale_px, col)
-
-	# cars
-	var cars: Array = msg.get("cars", [])
-	for c in cars:
-		var arm: String = c[0]
-		var crashed := bool(c[2])
-		var ctr := _w(_car_center(arm, float(c[1])).x, _car_center(arm, float(c[1])).y)
-		draw_set_transform(ctr, _car_angle(arm), Vector2.ONE)
-		var col2 := CRASH_COL if crashed else CAR_COL
-		draw_rect(Rect2(Vector2(-CAR_LEN / 2.0, -CAR_W / 2.0) * scale_px, Vector2(CAR_LEN, CAR_W) * scale_px), col2)
-		draw_rect(Rect2(Vector2(CAR_LEN / 2.0 - 1.5, -CAR_W / 2.0 + 0.2) * scale_px, Vector2(0.9, CAR_W - 0.4) * scale_px), col2.darkened(0.45))
-		draw_rect(Rect2(Vector2(-CAR_LEN / 2.0, -CAR_W / 2.0) * scale_px, Vector2(CAR_LEN, CAR_W) * scale_px), Color(0.2, 0.25, 0.4), false, 1.0)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	# crash smiley
-	if bool(msg.get("crash", false)):
-		var cc := _w(0.0, 0.0)
-		draw_circle(cc, 2.2 * scale_px, Color(1.0, 0.8, 0.1))
-		draw_arc(cc, 2.2 * scale_px, 0.0, TAU, 32, Color(0.2, 0.2, 0.1), 2.0)
-		for sx in [-0.8, 0.8]:
-			var e := cc + Vector2(float(sx), -0.6) * scale_px
-			draw_line(e + Vector2(-0.35, -0.35) * scale_px, e + Vector2(0.35, 0.35) * scale_px, Color(0.2, 0.2, 0.1), 2.0)
-			draw_line(e + Vector2(-0.35, 0.35) * scale_px, e + Vector2(0.35, -0.35) * scale_px, Color(0.2, 0.2, 0.1), 2.0)
-		draw_line(cc + Vector2(-0.9, 0.8) * scale_px, cc + Vector2(0.9, 0.8) * scale_px, Color(0.2, 0.2, 0.1), 2.0)
+func _make_car(cid: int) -> Node3D:
+	var root := Node3D.new()
+	var mat := _mat(CAR_COLS[cid % CAR_COLS.size()], 1.0, 0.3)
+	root.set_meta("mat", mat)
+	root.set_meta("col", CAR_COLS[cid % CAR_COLS.size()])
+	_box(Vector3(CAR_LEN, 0.7, CAR_W), Vector3(0, 0.6, 0), mat, root)
+	_box(Vector3(2.4, 0.6, CAR_W - 0.2), Vector3(-0.3, 1.25, 0), mat, root)
+	_box(Vector3(0.05, 0.4, CAR_W - 0.5), Vector3(0.9, 1.25, 0), _mat(Color(0.15, 0.2, 0.3)), root)      # windscreen
+	var wheel := _mat(Color(0.08, 0.08, 0.08))
+	for wx in [-1.4, 1.4]:
+		for wz in [-0.85, 0.85]:
+			var w := _cyl(0.32, 0.25, Vector3(float(wx), 0.32, float(wz)), wheel, root)
+			w.rotation_degrees = Vector3(90, 0, 0)
+	_box(Vector3(0.05, 0.18, 0.4), Vector3(CAR_LEN / 2.0, 0.6, 0.6), _mat(Color(1.0, 1.0, 0.8)), root)   # headlights
+	_box(Vector3(0.05, 0.18, 0.4), Vector3(CAR_LEN / 2.0, 0.6, -0.6), _mat(Color(1.0, 1.0, 0.8)), root)
+	add_child(root)
+	return root
 
 
-func _lamp(pos: Vector2, on: bool, col: Color, broken: bool) -> void:
-	draw_circle(pos, 0.5 * scale_px, col if on else col.darkened(0.75))
-	if broken:
-		var o := Color(0.95, 0.5, 0.1)
-		draw_circle(pos, 0.3 * scale_px, o)
-		draw_line(pos + Vector2(-0.2, -0.2) * scale_px, pos + Vector2(0.2, 0.2) * scale_px, Color(0.3, 0.1, 0.0), 2.0)
-		draw_line(pos + Vector2(-0.2, 0.2) * scale_px, pos + Vector2(0.2, -0.2) * scale_px, Color(0.3, 0.1, 0.0), 2.0)
-
-
-func _head(cx: float, cy: float, horizontal: bool, group: int) -> void:
-	var lit: Dictionary = msg.get("lit", {})
-	var params: Dictionary = msg.get("params", {})
-	var size := Vector2(4.4, 1.7) if horizontal else Vector2(1.7, 4.4)
-	draw_rect(Rect2(_w(cx - size.x / 2.0, cy - size.y / 2.0), size * scale_px), HOUSING)
-	var cols := [SIG_R, SIG_Y, SIG_G]
-	var letters := ["R", "Y", "G"]
-	for i in 3:
-		var off := float(i - 1) * 1.4
-		var pos := _w(cx + off, cy) if horizontal else _w(cx, cy + off)
-		var nm := "TL%d%s" % [group, letters[i]]
-		_lamp(pos, bool(lit.get(nm, false)), cols[i], bool(params.get("bk_" + nm, false)))
-
-
-func _ped_head(cx: float, cy: float, group: int, end: int) -> void:
-	var lit: Dictionary = msg.get("lit", {})
-	var params: Dictionary = msg.get("params", {})
-	var cmdd: Dictionary = msg.get("cmd", {})
-	var btn: Dictionary = msg.get("btn", {})
-	draw_rect(Rect2(_w(cx - 0.65, cy - 1.4), Vector2(1.3, 2.8) * scale_px), HOUSING)
-	var rn := "PL%dR" % group
-	var gn := "PL%dG" % group
-	_lamp(_w(cx, cy - 0.65), bool(lit.get(rn, false)), SIG_R, bool(params.get("bk_" + rn, false)))
-	_lamp(_w(cx, cy + 0.65), bool(lit.get(gn, false)), SIG_G, bool(params.get("bk_" + gn, false)))
-	if end == 0:
-		# request acknowledged (yellow disc) and push button (square) next to the first head of each crosswalk
-		if bool(cmdd.get("PD%dA" % group, false)):
-			draw_circle(_w(cx, cy - 2.0), 0.5 * scale_px, Color(1.0, 0.85, 0.1))
-		var pressed := bool(btn.get(str(group), false))
-		draw_rect(Rect2(_w(cx - 0.3, cy + 1.6), Vector2(0.6, 0.6) * scale_px), Color(1.0, 0.5, 0.1) if pressed else Color(0.45, 0.45, 0.45))
+func _make_ped() -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var m := CapsuleMesh.new()
+	m.radius = 0.22
+	m.height = 1.7
+	mi.mesh = m
+	mi.material_override = _mat(Color(0.1, 0.1, 0.5))
+	add_child(mi)
+	return mi
 
 
 # ---------------------------------------------------------------------- panel
@@ -395,7 +497,7 @@ func _send_ui() -> void:
 
 func _add_help(layer: CanvasLayer) -> void:
 	var help := Label.new()
-	help.text = "yellow disc = request acknowledged (I_YPDnA)   |   orange square = push button   |   orange loop = vehicle detector   |   orange cross = broken lamp"
+	help.text = "mouse: drag orbit, middle-drag pan, wheel zoom   |   keys: arrows pan, Shift+arrows orbit, +/- zoom, Home reset   |   orange loop = detector, orange diamond = broken lamp, yellow lamp on a pole = request acknowledged"
 	help.add_theme_font_size_override("font_size", 12)
 	help.add_theme_color_override("font_color", Color(0.1, 0.12, 0.16))
 	help.anchor_top = 1.0
@@ -406,7 +508,8 @@ func _add_help(layer: CanvasLayer) -> void:
 
 
 # -------------------------------------------------------------------- update
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_camera_keys(delta)
 	while udp.get_available_packet_count() > 0:
 		var pkt := udp.get_packet()
 		var ip := udp.get_packet_ip()
@@ -420,9 +523,6 @@ func _process(_delta: float) -> void:
 				cmd.set_dest_address(sim_host, cmd_port)
 			if not ui_ready and msg.has("params"):
 				_fill_ui(msg["params"])
-	queue_redraw()
-	var vs := get_viewport_rect().size
-	fault_box.position = Vector2(vs.x - PANEL_W - 190.0, 10.0)
 
 	var live := Time.get_ticks_msec() - last_rx_ms < 1000
 	if msg.is_empty() or not live:
@@ -432,18 +532,182 @@ func _process(_delta: float) -> void:
 		fault_box.visible = false
 		return
 
-	send_timer += get_process_delta_time()
+	send_timer += delta
 	if send_timer > 0.2:
 		send_timer = 0.0
 		_send_ui()
+
+	var lit: Dictionary = msg.get("lit", {})
+	var params: Dictionary = msg.get("params", {})
+	var cmdd: Dictionary = msg.get("cmd", {})
+	var btn: Dictionary = msg.get("btn", {})
+	var det: Dictionary = msg.get("det", {})
+	for n in LAMP_NAMES:
+		_set_lamp(n, bool(lit.get(n, false)))
+		for d in bk_marks[n]:
+			(d as MeshInstance3D).visible = bool(params.get("bk_" + n, false))
+	for k in det_nodes:
+		var dn: MeshInstance3D = det_nodes[k]
+		var on := bool(det.get(k, false))
+		var dm := dn.material_override as StandardMaterial3D
+		dm.albedo_color = Color(1.0, 0.55, 0.1) if on else Color(0.85, 0.5, 0.2).darkened(0.3)
+		dm.emission_enabled = on
+		dm.emission = Color(1.0, 0.55, 0.1)
+	for g in req_lamps:
+		var on2 := bool(cmdd.get("PD%dA" % g, false))
+		for rl in req_lamps[g]:
+			var rm := (rl as MeshInstance3D).material_override as StandardMaterial3D
+			rm.albedo_color = Color(1.0, 0.85, 0.1) if on2 else Color(1.0, 0.85, 0.1).darkened(0.7)
+			rm.emission_enabled = on2
+			rm.emission = Color(1.0, 0.85, 0.1)
+	for g in btn_nodes:
+		var pressed := bool(btn.get(str(g), false))
+		for bb in btn_nodes[g]:
+			((bb as MeshInstance3D).material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.5, 0.1) if pressed else Color(0.45, 0.45, 0.45)
+
+	# cars: create / move / remove by id
+	var seen := {}
+	var cars: Array = msg.get("cars", [])
+	for c in cars:
+		var cid := int(c[3])
+		seen[cid] = true
+		if not car_nodes.has(cid):
+			car_nodes[cid] = _make_car(cid)
+		var node: Node3D = car_nodes[cid]
+		var arm: String = c[0]
+		node.position = _car_center(arm, float(c[1]))
+		node.rotation.y = _car_yaw(arm)
+		var cm: StandardMaterial3D = node.get_meta("mat")
+		cm.albedo_color = CRASH_COL if bool(c[2]) else (node.get_meta("col") as Color)
+	for cid in car_nodes.keys():
+		if not seen.has(cid):
+			(car_nodes[cid] as Node3D).queue_free()
+			car_nodes.erase(cid)
+	# pedestrians
+	var pseen := {}
+	var peds: Array = msg.get("peds", [])
+	for q in peds:
+		var pid := int(q[4])
+		pseen[pid] = true
+		if not ped_nodes.has(pid):
+			ped_nodes[pid] = _make_ped()
+		var pn: MeshInstance3D = ped_nodes[pid]
+		var cw: String = q[0]
+		var st: String = q[3]
+		var dd := int(q[2])
+		var pp := _ped_pos(cw, float(q[1]), dd)
+		if st == "wait":
+			var axis := Vector3(1, 0, 0) if (cw == "N" or cw == "S") else Vector3(0, 0, 1)
+			pp = _ped_pos(cw, 0.0, dd) - axis * float(dd) * 0.9       # waits at the kerb before the crosswalk
+		pn.position = pp + Vector3(0, 0.85, 0)
+		var pm := pn.material_override as StandardMaterial3D
+		pm.albedo_color = Color(0.8, 0.1, 0.1) if st == "hit" else (Color(0.35, 0.35, 0.6) if st == "wait" else Color(0.1, 0.1, 0.5))
+	for pid in ped_nodes.keys():
+		if not pseen.has(pid):
+			(ped_nodes[pid] as MeshInstance3D).queue_free()
+			ped_nodes.erase(pid)
+
+	crash_ball.visible = bool(msg.get("crash", false))
 	fault_box.visible = bool(msg.get("hw_fault", false))
 	var s: Dictionary = msg.get("stats", {})
-	var q: Dictionary = msg.get("queue", {})
-	var cars: Array = msg.get("cars", [])
+	var q2: Dictionary = msg.get("queue", {})
 	hud.text = "t %.0f s    OPC UA clients: %d%s\nvehicles on the road %d, passed %d, average wait %.1f s, stopped at red/yellow: queue W %d  E %d  N %d  S %d (max %d)\npedestrians crossed %d, average wait %.1f s     red-light violations %d     crashes %d" % [
 		float(msg["t"]), int(msg.get("clients", 0)), "" if bool(msg.get("plc", false)) else "   (no PLC - all lamps dark, drivers stop)",
 		cars.size(), int(s.get("cars_passed", 0)), float(s.get("car_wait_avg", 0.0)),
-		int(q.get("W", 0)), int(q.get("E", 0)), int(q.get("N", 0)), int(q.get("S", 0)), int(s.get("max_queue", 0)),
+		int(q2.get("W", 0)), int(q2.get("E", 0)), int(q2.get("N", 0)), int(q2.get("S", 0)), int(s.get("max_queue", 0)),
 		int(s.get("peds_crossed", 0)), float(s.get("ped_wait_avg", 0.0)), int(s.get("violations", 0)), int(s.get("crashes", 0))]
 	if bool(msg.get("crash", false)):
 		hud.text += "\nCOLLISION - clear it in the panel"
+
+
+func _unhandled_input(ev: InputEvent) -> void:
+	if _camera_event(ev):
+		return
+	if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT):
+		yaw -= ev.relative.x * 0.005
+		pitch = clampf(pitch + ev.relative.y * 0.005, -0.2, 1.5)
+		_update_camera()
+	elif ev is InputEventMouseButton and ev.pressed:
+		if ev.button_index == MOUSE_BUTTON_WHEEL_UP:
+			dist = maxf(CAM_DIST_MIN, dist * 0.92)
+			_update_camera()
+		elif ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			dist = minf(CAM_DIST_MAX, dist * 1.08)
+			_update_camera()
+
+
+func _update_camera() -> void:
+	var p := target + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * dist
+	cam.look_at_from_position(p, target, Vector3.UP)
+
+
+# ------------------------------------------------------- camera: keyboard + middle mouse
+## Arrow keys pan the view (the scene moves in the arrow's direction), Shift+arrows orbit, +/- (or PageUp/Down)
+## zoom, Home resets the view; mouse: left drag orbits, middle drag pans, wheel zooms.
+const CAM_PITCH_MIN := -0.2
+const CAM_DIST_MIN := 3.0
+const CAM_DIST_MAX := 140.0
+var keys_armed := {}                # keys whose press reached us (not consumed by a focused UI control)
+var home := {}
+
+
+func _save_home() -> void:
+	home = {"yaw": yaw, "pitch": pitch, "dist": dist, "target": target}
+
+
+func _key_down(k: int) -> bool:
+	return bool(keys_armed.get(k, false)) and Input.is_key_pressed(k as Key)
+
+
+func _camera_keys(delta: float) -> void:
+	var dx := 0.0
+	var dy := 0.0
+	if _key_down(KEY_LEFT):
+		dx -= 1.0
+	if _key_down(KEY_RIGHT):
+		dx += 1.0
+	if _key_down(KEY_UP):
+		dy -= 1.0
+	if _key_down(KEY_DOWN):
+		dy += 1.0
+	var zoom := 0.0
+	if _key_down(KEY_EQUAL) or _key_down(KEY_KP_ADD) or _key_down(KEY_PLUS) or _key_down(KEY_PAGEUP):
+		zoom -= 1.0
+	if _key_down(KEY_MINUS) or _key_down(KEY_KP_SUBTRACT) or _key_down(KEY_PAGEDOWN):
+		zoom += 1.0
+	if dx == 0.0 and dy == 0.0 and zoom == 0.0:
+		return
+	if Input.is_key_pressed(KEY_SHIFT):
+		yaw -= dx * 1.5 * delta
+		pitch = clampf(pitch + dy * 1.5 * delta, CAM_PITCH_MIN, 1.5)
+	else:
+		var right := cam.global_transform.basis.x
+		var up := cam.global_transform.basis.y
+		target += (up * dy - right * dx) * dist * 0.5 * delta
+	dist = clampf(dist * exp(zoom * 1.2 * delta), CAM_DIST_MIN, CAM_DIST_MAX)
+	_update_camera()
+
+
+func _pan_drag(rel: Vector2) -> void:
+	var k := dist * 0.0015
+	target += (cam.global_transform.basis.y * rel.y - cam.global_transform.basis.x * rel.x) * k
+	_update_camera()
+
+
+func _camera_event(ev: InputEvent) -> bool:
+	if ev is InputEventKey:
+		if ev.pressed:
+			keys_armed[ev.keycode] = true
+			if ev.keycode == KEY_HOME and not ev.echo and not home.is_empty():
+				yaw = home["yaw"]
+				pitch = home["pitch"]
+				dist = home["dist"]
+				target = home["target"]
+				_update_camera()
+		return true
+	if ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_MIDDLE):
+		_pan_drag(ev.relative)
+		return true
+	return false
+
+

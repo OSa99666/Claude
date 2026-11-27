@@ -100,7 +100,7 @@ class Simulator:
         msg = {"t": round(self.t, 3), "crash": m.crash, "hw_fault": m.hardware_fault(), "plc": self.clients > 0, "clients": self.clients,
                "cmd": self.cmd, "lit": m.lit, "det": m.det, "btn": {"1": m.btn[1], "2": m.btn[2]},
                "cars": [[c.arm, round(c.s, 2), c.crashed, c.cid] for c in m.cars],
-               "peds": [[q.cw, round(q.u, 3), q.d, q.state] for q in m.peds],
+               "peds": [[q.cw, round(q.u, 3), q.d, q.state, q.pid] for q in m.peds],
                "stats": dict(s, car_wait_avg=s["car_wait_total"] / npass, ped_wait_avg=s["ped_wait_total"] / npeds),
                "queue": m.queue_lengths(), "params": params}
         try:

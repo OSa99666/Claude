@@ -1,6 +1,6 @@
 # Intersection simulation - PLC control demo
 
-A road intersection with vehicles and pedestrians, simulated in Python and shown in Godot (2D top view).  The **PLC** (CODESYS)
+A road intersection with vehicles and pedestrians, simulated in Python and shown in Godot (3D).  The **PLC** (CODESYS)
 controls the traffic lights and pedestrian lights over OPC UA and gets lamp feedback, vehicle detectors, pedestrian push buttons and an
 intersection fault.  **Standalone**: own launcher, config and ports (OPC UA 4844, UDP 9878/9879), like the other four demos.
 It re-creates the existing CODESYS intersection simulation (picture supplied by the user) with moving traffic.
@@ -8,7 +8,7 @@ It re-creates the existing CODESYS intersection simulation (picture supplied by 
 ```
  PLC (OPC UA client)             Linux PC
 ┌──────────────────┐  OPC UA   ┌─────────────────────────┐  UDP 9878 state   ┌──────────────────────┐
-│ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 2D view +     │
+│ CODESYS          │──────────►│ Python simulator        │──────────────────►│ Godot: 3D view +     │
 │ Data Source Mgr  │ port 4844 │ traffic model, server   │◄──────────────────│ traffic / fault UI   │
 └──────────────────┘           └─────────────────────────┘  UDP 9879 UI      └──────────────────────┘
 ```
@@ -84,6 +84,6 @@ DatasourcesTasks cycle (40 ms needs a 10 ms task), otherwise the Data Source Man
 
 * Verified here: model tests (stopping, queues, yellow decision, crash + latch, runners, pedestrians, faults, repeatability, fixed-time controller
   without crash), OPC UA round trip, headless `run.sh` with the mock PLC.
-* **Not run in Godot** (no Godot in the development container) - the 2D view and panel have to be checked by the user.
+* **Not run in Godot** (no Godot in the development container) - the 3D view and panel have to be checked by the user.
 * Assumptions to confirm: the pedestrian light / direction naming (group 1 walks with direction-1 traffic), the detector assignment
   (`I_XTD11` west arm, `I_XTD12` east, `I_XTD21` north, `I_XTD22` south), `I_XF` = hardware error (broken lamp; detector/button faults do not set it).  Not verified: the real PLC link.
