@@ -48,12 +48,16 @@ var end_pos: Array[Vector3] = []               # where items leave belt n (0 = T
 var end_dir: Array[Vector3] = []
 var colours_argb: Array = [0, 0xFF000065, 0xFF006500, 0xFF650000, 0xFF656500, 0xFFD0D0D0]   # T_XCQ item colours (from the simulator)
 var motor_lamps: Array[MeshInstance3D] = []
+var motor_leds: Array = []                    # per motor: [command LED (T_YH1n), running LED (T_XGH1n)]
+var ej_leds: Array = []                       # per ejector: [T_YH2n, T_YL2n (commands), T_XGH2n, T_XGL2n (feedbacks)]
 
 var yaw := 0.75
 var pitch := 0.6
 var dist := 7.0
 var target := Vector3(2.4, 0.0, 0.8)
 
+const LED_HIGH := Color8(0x00, 0x65, 0x00)      # dark green: command / High / running
+const LED_LOW := Color8(0x65, 0x65, 0x00)       # dark yellow: Low / retracted
 const METAL := Color(0.6, 0.63, 0.68)     # frame / sensor housing colour; detectors show this when off
 const BELT_W := 0.3
 const FLOOR_Y := -0.60                    # top of the ground / bin floors
@@ -186,6 +190,8 @@ func _build(g: Dictionary) -> void:
 	end_pos.clear()
 	end_dir.clear()
 	motor_lamps.clear()
+	motor_leds.clear()
+	ej_leds.clear()
 	var tm := float(g["tick_m"])
 	var tpi := float(g["tpi"])
 	var r := tpi / 2.0
@@ -225,6 +231,7 @@ func _build(g: Dictionary) -> void:
 		var plate := _box(Vector3(0.18, 0.15, 0.02), Vector3(0, 0, 0.26), _mat(Color(0.9, 0.55, 0.15)), rod)
 		plate.name = "plate"
 		rods.append(rod)
+		_add_ejector_leds(x, "E%d" % (k + 1))
 		# "item in front of ejector" sensor: bracket on the -Z side, sensor head above the ejection position
 		var bx := x - 0.14
 		_box(Vector3(0.03, 0.32, 0.03), Vector3(bx, 0.15, -BELT_W / 2.0 - 0.04), frame_mat)
@@ -274,8 +281,11 @@ func _build(g: Dictionary) -> void:
 	det_lamp = _box(Vector3(0.08, 0.08, 0.08), Vector3(dx, 0.32, 0), _mat(METAL, 0.5))
 	# motors (one per conveyor): cylinders at the side of each belt's start; colour = running
 	motor_lamps.append(_cyl(0.07, 0.2, Vector3(0.2, 0.08, -BELT_W / 2.0 - 0.14), Vector3(90, 0, 0)))
+	_add_motor_leds(Vector3(0.2, 0.08, -BELT_W / 2.0 - 0.14), Vector3.BACK, "T1")
 	for k in 4:
-		motor_lamps.append(_cyl(0.07, 0.2, Vector3(float(ej[k]) * tm + BELT_W / 2.0 + 0.14, 0.08, BELT_W / 2.0 + 0.2), Vector3(0, 0, 90)))
+		var mp := Vector3(float(ej[k]) * tm + BELT_W / 2.0 + 0.14, 0.08, BELT_W / 2.0 + 0.2)
+		motor_lamps.append(_cyl(0.07, 0.2, mp, Vector3(0, 0, 90)))
+		_add_motor_leds(mp, Vector3.RIGHT, "T%d" % (k + 2))
 	# belt stripes (move with the belt speed)
 	for b in belt_info.size():
 		var info: Dictionary = belt_info[b]
@@ -531,8 +541,17 @@ func _process(delta: float) -> void:
 		rods[k].position.z = -BELT_W / 2.0 - 0.25 + float(ejp[k]) * 0.3
 	var io: Dictionary = msg["io"]
 	var run: Array = msg["run"]
+	var cmd_in: Dictionary = msg.get("cmd", {})
+	for k in 4:
+		var e: Array = ej_leds[k]
+		_led(e[0], bool(cmd_in.get("T_YH2%d" % (k + 1), false)), LED_HIGH)
+		_led(e[1], bool(cmd_in.get("T_YL2%d" % (k + 1), false)), LED_LOW)
+		_led(e[2], bool(io.get("T_XGH2%d" % (k + 1), false)), LED_HIGH)
+		_led(e[3], bool(io.get("T_XGL2%d" % (k + 1), false)), LED_LOW)
 	for b in 5:
 		_lamp(motor_lamps[b], bool(run[b]), _tc(2), METAL)     # same green as the type-2 items
+		_led(motor_leds[b][0], bool(cmd_in.get("T_YH1%d" % (b + 1), false)), LED_HIGH)
+		_led(motor_leds[b][1], bool(io.get("T_XGH1%d" % (b + 1), false)), LED_HIGH)
 	for k in 4:
 		_lamp(front_lamps[k], bool(io.get("T_XCQ1%d" % (k + 1), false)), Color(1.0, 0.8, 0.1), METAL)
 	var xcq := int(io.get("T_XCQ", 0))
@@ -610,6 +629,58 @@ func _spawn_fall(n: int, item_id: int, speed: float) -> void:
 	world.add_child(mi)
 	fall_items.append({"node": mi, "store": n, "id": item_id, "pos": end_pos[n], "dir": end_dir[n],
 			"speed": speed, "vy": 0.0, "angle": 0.0})
+
+
+## One indicator LED (sphere) at `pos`; coloured and glowing when on, metal when off.
+func _led_node(pos: Vector3) -> MeshInstance3D:
+	var led := MeshInstance3D.new()
+	var lm := SphereMesh.new()
+	lm.radius = 0.016
+	lm.height = 0.032
+	led.mesh = lm
+	led.material_override = _mat(METAL, 0.5)
+	led.position = pos
+	world.add_child(led)
+	return led
+
+
+func _led(m: MeshInstance3D, on: bool, colour: Color) -> void:
+	var mat := m.material_override as StandardMaterial3D
+	mat.albedo_color = colour if on else METAL
+	mat.emission_enabled = on
+	mat.emission = colour
+	mat.emission_energy_multiplier = 1.5
+
+
+func _caption(text: String, pos: Vector3) -> void:
+	var lab := Label3D.new()
+	lab.text = text
+	lab.font_size = 28
+	lab.pixel_size = 0.0018
+	lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lab.modulate = Color(0.6, 0.65, 0.75)
+	lab.position = pos
+	world.add_child(lab)
+
+
+## Motor: command LED (T_YH1n, start) and running LED (T_XGH1n) above the motor, side by side along `axis`.
+func _add_motor_leds(motor_pos: Vector3, axis: Vector3, label: String) -> void:
+	var p := motor_pos + Vector3(0, 0.15, 0)
+	motor_leds.append([_led_node(p - axis * 0.035), _led_node(p + axis * 0.035)])
+	_caption(label, p + Vector3(0, 0.08, 0))
+
+
+## Ejector: small panel on top of the cylinder housing with the command row (T_YH2n extend, T_YL2n retract)
+## and the feedback row (T_XGH2n extended, T_XGL2n retracted).
+func _add_ejector_leds(x: float, label: String) -> void:
+	var zc := -BELT_W / 2.0 - 0.3
+	_box(Vector3(0.14, 0.012, 0.13), Vector3(x, 0.156, zc), _mat(Color(0.25, 0.3, 0.4), 0.3))
+	var l: Array = []
+	for row in 2:
+		for col in 2:
+			l.append(_led_node(Vector3(x - 0.032 + 0.064 * col, 0.172, zc - 0.035 + 0.07 * row)))
+	ej_leds.append(l)
+	_caption(label, Vector3(x, 0.26, zc))
 
 
 func _b(v) -> String:
