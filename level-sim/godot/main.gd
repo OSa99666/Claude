@@ -190,8 +190,8 @@ func _valve(x: float, y: float, disc: Node3D, lever: Node3D, steel: Material) ->
 	_cyl(0.14, 0.25, Vector3(x, y + 0.7, 0), _mat(Color(0.25, 0.3, 0.4), 1.0, 0.3))
 	disc.position = Vector3(x, y, 0)
 	var dm := CylinderMesh.new()
-	dm.top_radius = 0.16
-	dm.bottom_radius = 0.16
+	dm.top_radius = 0.11
+	dm.bottom_radius = 0.11
 	dm.height = 0.025
 	var dmi := MeshInstance3D.new()
 	dmi.mesh = dm
@@ -208,12 +208,23 @@ func _valve(x: float, y: float, disc: Node3D, lever: Node3D, steel: Material) ->
 	bar.material_override = _mat(LEVER)
 	lever.add_child(bar)
 	for fx in [-0.28, 0.28]:
-		_cyl(0.2, 0.06, Vector3(x + float(fx), y, 0), steel, Vector3(0, 0, 90))    # flanges
+		_cyl(0.17, 0.05, Vector3(x + float(fx), y, 0), steel, Vector3(0, 0, 90))    # flanges
+
+
+## Steel pipe x0..x1 along X with a transparent window (glass) around the valve at xv, so the disc can be seen.
+## The flow particles show through the window.
+func _pipe_with_window(x0: float, x1: float, xv: float, y: float, steel: Material, glass: Material) -> void:
+	var wa := xv - 0.28
+	var wb := xv + 0.28
+	_cyl(0.12, wa - x0, Vector3((x0 + wa) / 2.0, y, 0), steel, Vector3(0, 0, 90))
+	_cyl(0.12, x1 - wb, Vector3((wb + x1) / 2.0, y, 0), steel, Vector3(0, 0, 90))
+	_cyl(0.12, wb - wa, Vector3(xv, y, 0), glass, Vector3(0, 0, 90))
 
 
 func _build_plant() -> void:
 	var steel := _mat(METAL, 1.0, 0.5)
 	var glass := _mat(Color(0.75, 0.85, 0.95), 0.22)
+	var pipe_glass := _mat(Color(0.75, 0.85, 0.95), 0.25)
 	# vessel
 	_cyl(VESSEL_R + 0.06, 0.1, Vector3(0, VESSEL_Y0 - 0.05, 0), steel)
 	_cyl(VESSEL_R, VESSEL_H, Vector3(0, VESSEL_Y0 + VESSEL_H / 2.0, 0), glass)
@@ -242,7 +253,7 @@ func _build_plant() -> void:
 		_label3d("%d %%" % v, Vector3(-VESSEL_R - 0.55, y, 0.0), 28)
 	# inlet pipe (top left) with a short drop pipe over the vessel
 	var in_len := IN_END_X - PIPE_X0
-	_cyl(0.12, in_len, Vector3(PIPE_X0 + in_len / 2.0, IN_Y, 0), steel, Vector3(0, 0, 90))
+	_pipe_with_window(PIPE_X0, IN_END_X, -2.0, IN_Y, steel, pipe_glass)
 	_cyl(0.12, 0.3, Vector3(IN_END_X, IN_Y - 0.15, 0), steel)
 	var elbow := MeshInstance3D.new()                  # closes the bend between the horizontal and the vertical pipe
 	var em := SphereMesh.new()
@@ -254,7 +265,7 @@ func _build_plant() -> void:
 	add_child(elbow)
 	# outlet pipe (bottom right)
 	var out_len := PIPE_X1 - VESSEL_R
-	_cyl(0.12, out_len, Vector3(VESSEL_R + out_len / 2.0, OUT_Y, 0), steel, Vector3(0, 0, 90))
+	_pipe_with_window(VESSEL_R, PIPE_X1, 2.0, OUT_Y, steel, pipe_glass)
 	_valve(-2.0, IN_Y, in_disc, in_lever, steel)
 	_valve(2.0, OUT_Y, out_disc, out_lever, steel)
 	_label3d("T_FCV10", Vector3(-2.0, IN_Y + 1.05, 0.0))
