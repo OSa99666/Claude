@@ -477,8 +477,8 @@ func _make_ped(pid: int) -> Node3D:
 	for leg in [leg_l, leg_r]:
 		var sh := _sphere(0.09, Vector3(0.05, -0.88, 0), shoe, leg)
 		sh.scale = Vector3(1.5, 0.6, 0.9)
-	var arm_l := _limb(root, Vector3(0, 1.46, -0.27), 0.055, 0.62, shirt)
-	var arm_r := _limb(root, Vector3(0, 1.46, 0.27), 0.055, 0.62, shirt)
+	var arm_l := _limb(root, Vector3(0, 1.46, -0.22), 0.055, 0.62, shirt)
+	var arm_r := _limb(root, Vector3(0, 1.46, 0.22), 0.055, 0.62, shirt)
 	for arm in [arm_l, arm_r]:
 		_sphere(0.06, Vector3(0, -0.64, 0), skin, arm)                            # hand
 	root.set_meta("legL", leg_l)
