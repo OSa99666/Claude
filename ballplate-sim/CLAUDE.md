@@ -7,7 +7,7 @@ Standalone simulations in the same repo, each with its own launcher, ports and C
 (bistable valve, OPC UA 4841) and `../transport-sim` (conveyor sorting, OPC UA 4842).  The table uses 4840.
 Visual style across simulations: dimmed colours (item/lamp colours = the ARGB words 0x000065 blue, 0x006500 green,
 0x650000 red, 0x656500 yellow, 0xD0D0D0 grey; metal (0.6,0.63,0.68); off = metal).
-A fourth sim, `../level-sim` (SISO level process, OPC UA 4843), follows the same pattern.
+Fourth and fifth sims, `../level-sim` (SISO level process, OPC UA 4843) and `../intersection-sim` (traffic intersection, OPC UA 4844), follow the same pattern.
 They copy `subscription_tweaks.py` (and the valve/two-state model) instead of sharing code; keep copies in sync.
 Decided with the user: the PLC control is external (no ST compiling here), "poke" is covered by the forced
 velocity/position setpoints, tuning plots are done in CODESYS, OPC UA security is on hold (lab access via VPN).
